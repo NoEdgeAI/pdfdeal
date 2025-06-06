@@ -43,17 +43,17 @@ async def get_key(apikey: str) -> str:
 
 
 async def pdf2file_v1(
-    apikey: str,
-    pdf_path: str,
-    output_path: str,
-    output_format: str,
-    ocr: bool,
-    maxretry: int,
-    rpm: int,
-    convert: bool,
-    translate: bool = False,
-    language: str = "zh",
-    model: str = "deepseek",
+        apikey: str,
+        pdf_path: str,
+        output_path: str,
+        output_format: str,
+        ocr: bool,
+        maxretry: int,
+        rpm: int,
+        convert: bool,
+        translate: bool = False,
+        language: str = "zh",
+        model: str = "deepseek",
 ):
     """
     Convert pdf file to specified file,
@@ -110,15 +110,15 @@ async def pdf2file_v1(
 
 
 async def img2file_v1(
-    apikey: str,
-    img_path: str,
-    output_path: str,
-    output_format: str,
-    formula: bool,
-    img_correction: bool,
-    maxretry: int,
-    rpm: int,
-    convert: bool,
+        apikey: str,
+        img_path: str,
+        output_path: str,
+        output_format: str,
+        formula: bool,
+        img_correction: bool,
+        maxretry: int,
+        rpm: int,
+        convert: bool,
 ) -> str:
     """
     Convert image file to specified file
@@ -167,10 +167,10 @@ class Doc2X:
     """Init the Doc2X class(V1)"""
 
     def __init__(
-        self,
-        apikey: str = None,
-        rpm: int = None,
-        thread: int = None,
+            self,
+            apikey: str = None,
+            rpm: int = None,
+            thread: int = None,
     ) -> None:
         """Init the Doc2X class
 
@@ -201,13 +201,13 @@ class Doc2X:
         self.maxretry = None
 
     async def pic2file_back(
-        self,
-        image_file: list,
-        output_path: str = "./Output",
-        output_format: str = "md_dollar",
-        img_correction: bool = True,
-        equation=False,
-        convert: bool = False,
+            self,
+            image_file: list,
+            output_path: str = "./Output",
+            output_format: str = "md_dollar",
+            img_correction: bool = True,
+            equation=False,
+            convert: bool = False,
     ) -> str:
         """
         Convert image file to specified file, with rate/thread limit
@@ -239,14 +239,14 @@ class Doc2X:
         return await process_status(image_file, completed_tasks)
 
     def pic2file(
-        self,
-        image_file,
-        output_path: str = "./Output",
-        output_names: list = None,
-        output_format: str = "md_dollar",
-        img_correction: bool = True,
-        equation: bool = False,
-        convert: bool = False,
+            self,
+            image_file,
+            output_path: str = "./Output",
+            output_names: list = None,
+            output_format: str = "md_dollar",
+            img_correction: bool = True,
+            equation: bool = False,
+            convert: bool = False,
     ) -> Tuple[list, list, bool]:
         """Convert image file to specified file
 
@@ -309,15 +309,15 @@ class Doc2X:
         return success, failed, flag
 
     async def pdf2file_back(
-        self,
-        pdf_file: list,
-        output_path: str = "./Output",
-        output_format: str = "md_dollar",
-        ocr: bool = True,
-        convert: bool = False,
-        translate: bool = False,
-        language: str = "zh",
-        model: str = "deepseek",
+            self,
+            pdf_file: list,
+            output_path: str = "./Output",
+            output_format: str = "md_dollar",
+            ocr: bool = True,
+            convert: bool = False,
+            translate: bool = False,
+            language: str = "zh",
+            model: str = "deepseek",
     ) -> str:
         """
         Convert pdf file to specified file, with rate/thread limit, async version
@@ -351,13 +351,13 @@ class Doc2X:
         return await process_status(pdf_file, completed_tasks)
 
     def pdf2file(
-        self,
-        pdf_file,
-        output_path: str = "./Output",
-        output_names: list = None,
-        output_format: str = "md_dollar",
-        ocr: bool = True,
-        convert: bool = False,
+            self,
+            pdf_file,
+            output_path: str = "./Output",
+            output_names: list = None,
+            output_format: str = "md_dollar",
+            ocr: bool = True,
+            convert: bool = False,
     ) -> Tuple[list, list, bool]:
         """Convert pdf file to specified file
 
@@ -421,12 +421,12 @@ class Doc2X:
         return run_async(get_limit(self.apikey))
 
     async def pdfdeal_back(
-        self,
-        input: str,
-        output: str,
-        path: str,
-        convert: bool,
-        limit: asyncio.Semaphore,
+            self,
+            input: str,
+            output: str,
+            path: str,
+            convert: bool,
+            limit: asyncio.Semaphore,
     ):
         """
         Convert pdf files into recognisable pdfs, significantly improving their effectiveness in RAG systems
@@ -465,11 +465,11 @@ class Doc2X:
             limit.release()
 
     async def pdfdeals(
-        self,
-        pdf_files: list,
-        output_path: str = "./Output",
-        output_format: str = "pdf",
-        convert: bool = True,
+            self,
+            pdf_files: list,
+            output_path: str = "./Output",
+            output_format: str = "pdf",
+            convert: bool = True,
     ) -> list:
         """
         Convert pdf files into recognisable pdfs, significantly improving their effectiveness in RAG systems
@@ -498,12 +498,12 @@ class Doc2X:
         return success_file, error_file, error_flag
 
     def pdfdeal(
-        self,
-        pdf_file,
-        output_format: str = "pdf",
-        output_names: list = None,
-        output_path: str = "./Output",
-        convert: bool = True,
+            self,
+            pdf_file,
+            output_format: str = "pdf",
+            output_names: list = None,
+            output_path: str = "./Output",
+            convert: bool = True,
     ) -> Tuple[list, list, bool]:
         """Deal with pdf file, convert it to specified format for RAG system
 
@@ -518,7 +518,7 @@ class Doc2X:
             tuple[list,list,str]:
             will return `list1`,`list2`,`bool`
                 `list1`: list of successful files path, if some files are failed, its path will be empty string
-                `list2`: list of failed files's error message and its original file path, id some files are successful, its error message will be empty string
+                `list2`: list of failed file's error message and its original file path, id some files are successful, its error message will be empty string
                 `bool`: True means that at least one file process failed
         """
         output_format = RAG_OutputType(output_format)

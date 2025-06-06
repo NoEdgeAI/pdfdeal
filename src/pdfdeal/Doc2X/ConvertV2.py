@@ -1,3 +1,7 @@
+import asyncio
+import random
+import string
+
 import httpx
 import json
 import os
@@ -26,7 +30,7 @@ IMAGE_ERROR_SOLUTIONS = {
     "parse_error": "图片内容无法解析，请反馈给我们 (Image content cannot be parsed, please provide feedback)",
     "parse_file_invalid": "无法解析这个图片，一般是图片不合法 (Cannot parse this image, usually due to invalid format)",
     "request_limit_exceeded": "请等待一段时间后再请求 (Please wait for a while before making another request)",
-    "parse_file_too_large": "当前允许单个图片大小 <= 3M，尝试对图片进行压缩 (Current single image size limit is <= 3M, try compressing the image)",
+    "parse_file_too_large": "当前允许单个图片大小 <= 7M，尝试对图片进行压缩 (Current single image size limit is <= 7M, try compressing the image)",
 }
 
 
@@ -50,7 +54,7 @@ async def upload_pdf(apikey: str, pdffile: str, oss_choose: str = "always") -> s
     """
     url = f"{Base_URL}/v2/parse/pdf"
     if oss_choose == "always" or (
-        oss_choose == "auto" and os.path.getsize(pdffile) >= 100 * 1024 * 1024
+            oss_choose == "auto" and os.path.getsize(pdffile) >= 100 * 1024 * 1024
     ):
         return await upload_pdf_big(apikey, pdffile)
     elif oss_choose == "none" and os.path.getsize(pdffile) >= 100 * 1024 * 1024:
@@ -190,9 +194,9 @@ async def decode_data(data: dict, convert: bool) -> Tuple[list, list]:
 
 @async_retry()
 async def uid_status(
-    apikey: str,
-    uid: str,
-    convert: bool = False,
+        apikey: str,
+        uid: str,
+        convert: bool = False,
 ) -> Tuple[int, str, list, list]:
     """Get the status of the file
 
@@ -247,11 +251,11 @@ async def uid_status(
 
 @async_retry()
 async def convert_parse(
-    apikey: str,
-    uid: str,
-    to: str,
-    filename: str = None,
-    merge_cross_page_forms: bool = False,
+        apikey: str,
+        uid: str,
+        to: str,
+        filename: str = None,
+        merge_cross_page_forms: bool = False,
 ) -> Tuple[str, str]:
     """Convert parsed file to specified format
 
@@ -359,7 +363,7 @@ async def get_convert_result(apikey: str, uid: str) -> Tuple[str, str]:
 
 @async_retry()
 async def download_file(
-    url: str, file_type: str, target_folder: str, target_filename: str
+        url: str, file_type: str, target_folder: str, target_filename: str
 ) -> str:
     """
     Download a file from the given URL to the specified target folder with the given filename.
@@ -421,64 +425,9 @@ async def image_code_check(code: str, trace_id: str = None):
     if code not in ["ok", "success"]:
         raise Exception(f"Unknown error code: {code}, Trace ID: {trace_id}")
 
-
-@async_retry()
-async def parse_image_ocr(apikey: str, image_path: str) -> dict:
-    """Parse image using OCR
-
-    Args:
-        apikey (str): The API key
-        image_path (str): Path to the image file
-
-    Raises:
-        FileError: If file size exceeds limit or file cannot be opened
-        RateLimit: If rate limit is reached
-        RequestError: If parsing fails
-        Exception: For any other errors
-
-    Returns:
-        dict: The parsed OCR results containing tex_lines
-    """
-    # Check file size
-    if os.path.getsize(image_path) > 3 * 1024 * 1024:  # 3MB
-        raise FileError("Image file size exceeds 3MB limit")
-
-    url = f"{Base_URL}/v2/parse/img/ocr"
-
-    try:
-        with open(image_path, "rb") as f:
-            file = f.read()
-    except Exception as e:
-        raise FileError(f"Open file error! {e}")
-
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30), http2=True) as client:
-        response = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {apikey}",
-            },
-            content=file,
-        )
-
-    trace_id = response.headers.get("trace-id", "Failed to get trace-id")
-
-    if response.status_code == 429:
-        raise RateLimit(trace_id=trace_id)
-
-    if response.status_code != 200:
-        raise Exception(f"Image OCR failed: {response.status_code}:{response.text}")
-
-    data = response.json()
-    await image_code_check(data.get("code", ""), trace_id=trace_id)
-
-    return data.get("data", {}).get("tex_lines", []), data.get("data", {}).get(
-        "uid", "Failed to get uid"
-    )
-
-
 @async_retry()
 async def parse_image_layout(
-    apikey: str, image_path: str, zip_path: str = None
+        apikey: str, image_path: str, zip_path: str = None
 ) -> tuple[list, str]:
     """Parse image layout
 
@@ -498,19 +447,32 @@ async def parse_image_layout(
             - list: List of page dictionaries with page dimensions and md content
             - str: The unique identifier (uid) of the request
     """
+    # Use the image name as the prefix for the zip file name
+    default_zip_filename = os.path.splitext(os.path.basename(image_path))[0]
+    new_zip_filename = f"{default_zip_filename}picture.zip"
+    
+    # Use zip_path + image name + picture.zip to name zip files
     if zip_path is None:
-        base_name = os.path.splitext(os.path.basename(image_path))[0]
-        zip_path = f"{base_name}picture.zip"
+        parent_directory = os.path.dirname(image_path)
+        if not parent_directory:
+            parent_directory = "."
+        zip_path = os.path.join(parent_directory, new_zip_filename)
+    else:
+        zip_path = os.path.join(zip_path, new_zip_filename)
+
     if not os.path.exists(zip_path):
         os.makedirs(os.path.dirname(zip_path), exist_ok=True)
+
     # Check zip_path is a file path and not exists
-    if os.path.isfile(zip_path):
-        raise FileError("zip_path already exists! Please check the path")
+    base_name, extension = os.path.splitext(zip_path)
+    random_digits = ''.join(random.choices(string.digits, k=10))
+    zip_path = f"{base_name}-{random_digits}{extension}"
+        # raise FileError("zip_path already exists! Please check the path")
     if not zip_path.endswith(".zip"):
         raise FileError("zip_path must end with .zip")
     # Check file size
-    if os.path.getsize(image_path) > 3 * 1024 * 1024:  # 3MB
-        raise FileError("Image file size exceeds 3MB limit")
+    if os.path.getsize(image_path) > 7 * 1024 * 1024:  # 7MB
+        raise FileError("Image file size exceeds 7MB limit")
 
     url = f"{Base_URL}/v2/parse/img/layout"
 

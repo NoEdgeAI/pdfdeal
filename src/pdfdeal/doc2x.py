@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import Tuple, List, Union, Optional
+from typing import Dict, Tuple, List, Union, Optional, Any, Coroutine
 import logging
 from .Doc2X.ConvertV2 import (
     upload_pdf,
@@ -20,13 +20,13 @@ logger = logging.getLogger(name="pdfdeal.doc2x")
 
 
 async def parse_pdf(
-    apikey: str,
-    pdf_path: str,
-    maxretry: int,
-    wait_time: int,
-    max_time: int,
-    convert: bool,
-    oss_choose: str = "auto",
+        apikey: str,
+        pdf_path: str,
+        maxretry: int,
+        wait_time: int,
+        max_time: int,
+        convert: bool,
+        oss_choose: str = "auto",
 ) -> Tuple[str, List[str], List[dict]]:
     """Parse PDF file and return uid and extracted text"""
 
@@ -91,13 +91,13 @@ async def parse_pdf(
 
 
 async def convert_to_format(
-    apikey: str,
-    uid: str,
-    output_format: str,
-    output_path: str,
-    output_name: str,
-    max_time: int,
-    merge_cross_page_forms: bool = False,
+        apikey: str,
+        uid: str,
+        output_format: str,
+        output_path: str,
+        output_name: str,
+        max_time: int,
+        merge_cross_page_forms: bool = False,
 ) -> str:
     """Convert parsed PDF to specified format"""
 
@@ -125,14 +125,14 @@ async def convert_to_format(
 
 class Doc2X:
     def __init__(
-        self,
-        apikey: str = None,
-        thread: int = 5,
-        max_pages: int = 1000,
-        retry_time: int = 5,
-        max_time: int = 300,
-        debug: bool = False,
-        full_speed: bool = False,
+            self,
+            apikey: str = None,
+            thread: int = 5,
+            max_pages: int = 1000,
+            retry_time: int = 5,
+            max_time: int = 300,
+            debug: bool = False,
+            full_speed: bool = False,
     ) -> None:
         """
         Initialize a Doc2X client.
@@ -182,39 +182,16 @@ class Doc2X:
             self._image_processor = ImageProcessor(self.apikey)
         return self._image_processor
 
-    def picocr(
-        self,
-        pic_file,
-        concurrent_limit: Optional[int] = 5,
-    ) -> tuple[List[Union[list, str]], List[dict], bool]:
-        """Process image files with OCR
-
-        Args:
-            pic_file (str | List[str]): Path to image file(s) or directory
-            concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to thread value.
-
-        Returns:
-            Tuple containing:
-                - List of OCR results (list or str) for each file
-                - List of dictionaries containing error information
-                - Boolean indicating if any errors occurred
-        """
-        return self.image_processor.pic2file(
-            pic_file=pic_file,
-            process_type="ocr",
-            concurrent_limit=concurrent_limit,
-        )
-
     def piclayout(
-        self,
-        pic_file: str,
-        zip_path: Optional[str] = None,
-        concurrent_limit: Optional[int] = 5,
+            self,
+            pic_file,
+            zip_path: Optional[str] = None,
+            concurrent_limit: Optional[int] = 5,
     ) -> tuple[List[Union[list, str]], List[dict], bool]:
-        """Process a single image file with layout analysis
+        """Process image files with layout analysis
 
         Args:
-            pic_file (str): Path to a single image file (jpg/png)
+            pic_file (str | List[str]): Path to image files (jpg/png)
             zip_path (str, optional): Path to save the zip file containing images. Defaults to None.
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to 5.
 
@@ -223,21 +200,7 @@ class Doc2X:
                 - List of layout analysis results (list or str)
                 - List of dictionaries containing error information
                 - Boolean indicating if any errors occurred
-
-        Raises:
-            ValueError: If the input file is not a jpg/png file or doesn't exist
         """
-        # Validate file exists
-        if not os.path.isfile(pic_file):
-            raise ValueError(f"File not found: {pic_file}")
-
-        # Validate file extension
-        ext = os.path.splitext(pic_file)[1].lower()
-        if ext not in [".jpg", ".jpeg", ".png"]:
-            raise ValueError(
-                f"Unsupported file type: {ext}. Only jpg/png files are supported."
-            )
-
         return self.image_processor.pic2file(
             pic_file=pic_file,
             process_type="layout",
@@ -246,14 +209,14 @@ class Doc2X:
         )
 
     async def pdf2file_back(
-        self,
-        pdf_file,
-        output_names: List[str] = None,
-        output_path: str = "./Output",
-        output_format: str = "md_dollar",
-        convert: bool = False,
-        oss_choose: str = "auto",
-        merge_cross_page_forms: bool = False,
+            self,
+            pdf_file,
+            output_names: List[str] = None,
+            output_path: str = "./Output",
+            output_format: str = "md_dollar",
+            convert: bool = False,
+            oss_choose: str = "auto",
+            merge_cross_page_forms: bool = False,
     ) -> Tuple[List[str], List[dict], bool]:
         if isinstance(pdf_file, str):
             if os.path.isdir(pdf_file):
@@ -514,15 +477,15 @@ class Doc2X:
         return success_files, failed_files, has_error
 
     def pdf2file(
-        self,
-        pdf_file,
-        output_names: List[str] = None,
-        output_path: str = "./Output",
-        output_format: str = "md_dollar",
-        convert: bool = False,
-        oss_choose: str = "always",
-        ocr: bool = False,
-        merge_cross_page_forms: bool = False,
+            self,
+            pdf_file,
+            output_names: List[str] = None,
+            output_path: str = "./Output",
+            output_format: str = "md_dollar",
+            convert: bool = False,
+            oss_choose: str = "always",
+            merge_cross_page_forms: bool = False,
+            ocr: bool = False,
     ) -> Tuple[List[str], List[dict], bool]:
         """Convert PDF file to specified format
 
@@ -533,9 +496,8 @@ class Doc2X:
             output_format (str, optional): The output format. Defaults to "md_dollar".
             convert (bool, optional): Convert "[" and "[[" to "$" and "$$". Defaults to False.
             oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
-            ocr (bool, optional): Whether to use OCR. Defaults to False.
             merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
-
+            ocr (bool, optional): This option is deprecated and will not be used.
         Returns:
             Tuple[List[str], List[dict], bool]: A tuple containing:
                 - List[str]: List of output file paths

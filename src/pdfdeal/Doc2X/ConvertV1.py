@@ -70,10 +70,10 @@ async def check_folder(path: str) -> bool:
 
 @async_retry()
 async def uuid2file(
-    apikey: str,
-    uuid: str,
-    output_format: Literal["md", "md_dollar", "latex", "docx"],
-    output_path: str = "./Output",
+        apikey: str,
+        uuid: str,
+        output_format: Literal["md", "md_dollar", "latex", "docx"],
+        output_path: str = "./Output",
 ) -> str:
     """Get the file by the uuid
 
@@ -148,12 +148,12 @@ async def get_limit(apikey: str) -> int:
 
 @async_retry()
 async def upload_pdf(
-    apikey: str,
-    pdffile: str,
-    ocr: bool = True,
-    translate: bool = False,
-    language: str = "zh",
-    model: str = "deepseek",
+        apikey: str,
+        pdffile: str,
+        ocr: bool = True,
+        translate: bool = False,
+        language: str = "zh",
+        model: str = "deepseek",
 ) -> str:
     """Upload pdf file to server and return the uuid of the file
 
@@ -211,8 +211,8 @@ async def upload_pdf(
     if post_res.status_code == 200:
         try:
             if (
-                "parse_task_limit_exceeded"
-                == json.loads(post_res.content.decode("utf-8"))["code"]
+                    "parse_task_limit_exceeded"
+                    == json.loads(post_res.content.decode("utf-8"))["code"]
             ):
                 raise RateLimit()
             else:
@@ -233,10 +233,10 @@ async def upload_pdf(
 
 @async_retry()
 async def upload_img(
-    apikey: str,
-    imgfile: str,
-    formula: bool = False,
-    img_correction: bool = False,
+        apikey: str,
+        imgfile: str,
+        formula: bool = False,
+        img_correction: bool = False,
 ) -> str:
     """Upload image file to server and return the uuid of the file
 
@@ -278,8 +278,8 @@ async def upload_img(
     if post_res.status_code == 200:
         try:
             if (
-                "parse_task_limit_exceeded"
-                == json.loads(post_res.content.decode("utf-8"))["code"]
+                    "parse_task_limit_exceeded"
+                    == json.loads(post_res.content.decode("utf-8"))["code"]
             ):
                 raise RateLimit()
             else:
@@ -380,10 +380,10 @@ async def decode_translate(datas: json, convert: bool) -> Tuple[list, list]:
 
 @async_retry()
 async def uuid_status(
-    apikey: str,
-    uuid: str,
-    convert: bool = False,
-    translate: bool = False,
+        apikey: str,
+        uuid: str,
+        convert: bool = False,
+        translate: bool = False,
 ) -> Tuple[int, str, list]:
     """Get the status of the file
 

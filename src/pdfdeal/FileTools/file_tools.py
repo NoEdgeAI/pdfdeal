@@ -56,52 +56,6 @@ def clear_cache():
         if os.path.isfile(file_path):
             os.remove(file_path)
 
-
-def extract_text_and_images(pdf_path, ocr, language=["ch_sim", "en"], GPU=False):
-    """
-    Extract text and images from a PDF file
-    """
-    from pypdf import PdfReader
-    from PIL import Image
-
-    Text = []
-
-    # Open the PDF file
-    with open(pdf_path, "rb") as file:
-        reader = PdfReader(file)
-
-        for page in reader.pages:
-            # Get the text content of the page
-            text = page.extract_text()
-            temp_image_folder = os.path.join(
-                os.path.expanduser("~"), ".cache", "pdfdeal", "pictures"
-            )
-            os.makedirs(temp_image_folder, exist_ok=True)
-            clear_cache()
-            # Get the images on the page
-            images = page.images
-            for id, image in enumerate(images):
-                image_data = image.data
-                image_stream = io.BytesIO(image_data)
-                pil_image = Image.open(image_stream)
-                # Save to HOME/.cache/pdfdeal/pictures, if the directory does not exist, create it
-                temp_image_path = os.path.join(
-                    os.path.expanduser("~"),
-                    ".cache",
-                    "pdfdeal",
-                    "pictures",
-                    f"{id}.png",
-                )
-                pil_image.save(temp_image_path)
-            option = {"GPU": GPU}
-            # Use ocr to extract text from images
-            ocr_text, All_Done = ocr(temp_image_folder, language, option)
-            text += f"\n{ocr_text}"
-            Text.append(clean_text(text))
-        clear_cache()
-    return Text, All_Done
-
-
 def gen_folder_list(path: str, mode: str, recursive: bool = False) -> list:
     """Generate a list of all files in the folder
 

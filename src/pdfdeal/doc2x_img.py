@@ -1,7 +1,8 @@
 import asyncio
 import logging
+from collections import deque
 from typing import Dict, List, Optional, Union
-from .Doc2X.ConvertV2 import parse_image_layout, parse_image_ocr
+from .Doc2X.ConvertV2 import parse_image_layout
 from .Doc2X.Exception import RateLimit, run_async
 from .FileTools.file_tools import get_files
 import os
@@ -14,49 +15,60 @@ class ImageProcessor:
 
     def __init__(self, apikey: str):
         """Initialize the image processor
-
         Args:
             apikey (str): API key for authentication
         """
         self.apikey = apikey
-        self._request_times: List[float] = []
-        self._lock = asyncio.Lock()
+        self._request_times = deque()
+        self._lock = None
+        self._loop = None
+        self._rate = 30
+        self._period = 30
+
+    async def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            # Get the loop from the current async context
+            self._loop = asyncio.get_running_loop()
+            self._lock = asyncio.Lock(loop=self._loop) # Pass the loop explicitly
+        return self._lock
 
     async def _check_rate_limit(self):
-        """Check and enforce rate limit (120 requests per 30 seconds)"""
-        async with self._lock:
-            current_time = asyncio.get_event_loop().time()
-            # Remove requests older than 30 seconds
-            self._request_times = [
-                t for t in self._request_times if current_time - t <= 30
-            ]
+        """Check and enforce rate limit (30 requests per 30 seconds)"""
+        lock = await self._get_lock()
 
-            if len(self._request_times) >= 120:
-                # Calculate wait time if rate limit reached
-                wait_time = 30 - (current_time - self._request_times[0])
-                if wait_time > 0:
-                    logger.warning(
-                        f"Rate limit reached, waiting for {wait_time:.2f} seconds"
-                    )
-                    await asyncio.sleep(wait_time)
-                    # Recursive call after waiting to ensure we're still within limits
-                    await self._check_rate_limit()
-
-            self._request_times.append(current_time)
+        while True:
+            async with lock:
+                current_time = asyncio.get_event_loop().time()
+                # Remove requests older than 30 seconds
+                while self._request_times and (current_time - self._request_times[0] > self._period):
+                    self._request_times.popleft()
+                if len(self._request_times) < self._rate:
+                    # Append new timestamp to sliding window
+                    self._request_times.append(current_time)
+                    return
+                # Wait time until oldest timestamp pop out
+                wait_time = self._period - (current_time - self._request_times[0])
+            # Sleep outside the critical section to avoid holding the lock during sleep
+            if wait_time > 0:
+                logger.warning(
+                    f"Rate limit reached, waiting for {wait_time:.2f} seconds. "
+                    f"Current count: {len(self._request_times)}"
+                )
+                await asyncio.sleep(wait_time)
 
     async def process_image(
-        self, image_path: str, process_type: str = "ocr", zip_path: str = None
+        self, image_path: str, process_type: str = "layout", zip_path: str = None
     ) -> tuple[list, str, bool]:
-        """Process an image with OCR or layout analysis
+        """Process an image with layout analysis
 
         Args:
             image_path (str): Path to the image file
-            process_type (str): Type of processing, can be 'ocr' or 'layout'
+            process_type (str): Type of processing, can be 'layout'
             zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
 
         Returns:
             Tuple containing:
-                - The processing result (list of tex_lines for OCR, list of pages for layout)
+                - The processing result (list of pages for layout)
                 - The uid of the processed image
                 - Boolean indicating if the processing was successful
 
@@ -64,19 +76,12 @@ class ImageProcessor:
             ValueError: If process_type is invalid or file type is not supported
             RateLimit: If rate limit is exceeded
         """
-        if process_type not in ["ocr", "layout"]:
-            raise ValueError("process_type must be one of: 'ocr', 'layout'")
+        if process_type not in ["layout"]:
+            raise ValueError("process_type must be one of: 'layout'")
 
         try:
             logger.info(f"Starting {process_type} processing for {image_path}")
-            if process_type == "ocr":
-                await self._check_rate_limit()
-                tex_lines, uid = await parse_image_ocr(self.apikey, image_path)
-                logger.info(
-                    f"Successfully completed OCR for {image_path} with uid {uid}"
-                )
-                return tex_lines, uid, True
-            else:
+            if process_type == "layout":
                 await self._check_rate_limit()
                 pages, uid = await parse_image_layout(self.apikey, image_path, zip_path)
                 logger.info(
@@ -85,7 +90,9 @@ class ImageProcessor:
                 if zip_path:
                     logger.info(f"Layout results saved to zip file at {zip_path}")
                 return pages, uid, True
-
+            else:
+                logger.error(f"Error process_type: {process_type}")
+                raise ValueError(f"Unsupported process_type: '{process_type}'")
         except RateLimit as e:
             logger.error(f"Rate limit exceeded while processing {image_path}: {str(e)}")
             raise
@@ -96,7 +103,7 @@ class ImageProcessor:
     async def process_multiple_images(
         self,
         image_paths: List[str],
-        process_type: str = "ocr",
+        process_type: str = "layout",
         concurrent_limit: int = 5,
         zip_path: str = None,
     ) -> tuple[List[list], Dict[str, bool]]:
@@ -104,7 +111,7 @@ class ImageProcessor:
 
         Args:
             image_paths (List[str]): List of image file paths
-            process_type (str): Type of processing, can be 'ocr' or 'layout'
+            process_type (str): Type of processing, can be 'layout'
             concurrent_limit (int): Maximum number of concurrent processing tasks
             zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
 
@@ -150,6 +157,15 @@ class ImageProcessor:
     async def pic2file_back(
         self,
         pic_file,
+        process_type: str = "layout",
+        concurrent_limit: Optional[int] = None,
+        zip_path: str = None,
+    ) -> tuple[List[Union[list, str]], List[dict], bool]:
+        """Process image files with layout analysis
+
+        Args:
+            pic_file (str | List[str]): Path to image file(s) or directory
+            process_type (str): Type of processing, can be 'layout'
         process_type: str = "ocr",
         concurrent_limit: Optional[int] = None,
         zip_path: str = None,
@@ -207,13 +223,12 @@ class ImageProcessor:
             logger.info(
                 f"Processing completed successfully: {success_count} file(s) processed"
             )
-
         return final_results, failed_files, has_error
 
     def pic2file(
         self,
         pic_file,
-        process_type: str = "ocr",
+        process_type: str = "layout",
         concurrent_limit: Optional[int] = None,
         zip_path: str = None,
     ) -> tuple[List[Union[list, str]], List[dict], bool]:
@@ -221,7 +236,7 @@ class ImageProcessor:
 
         Args:
             pic_file (str | List[str]): Path to image file(s) or directory
-            process_type (str): Type of processing, can be 'ocr' or 'layout'
+            process_type (str): Type of processing, can be 'layout'
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
             zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
 
