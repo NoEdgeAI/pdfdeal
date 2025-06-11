@@ -403,6 +403,7 @@ def auto_split_mds(
     return success, failed, flag
 
 
+# json 导出格式会使用该函数
 def save_json(
     output_path: str,
     output_name: str,

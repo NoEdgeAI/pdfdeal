@@ -394,8 +394,18 @@ async def download_file(
         target_dir = os.path.join(target_dir, os.path.splitext(os.path.basename(filename))[0])
     os.makedirs(target_dir, exist_ok=True)
     filename = os.path.splitext(filename)[0]
+
+    # 导出 md/tex时，在文件名最后加后缀
+    zip_file_suffix = ''
+    if file_type in ['md', 'md_dollar', 'tex']:
+        zip_file_suffix = file_type
+
     if file_type != "docx":
         file_type = "zip"
+
+
+    filename = f'{filename}_{zip_file_suffix}'
+    
     file_path = os.path.join(target_dir, f"{filename}.{file_type}")
     counter = 1
     while os.path.exists(file_path):

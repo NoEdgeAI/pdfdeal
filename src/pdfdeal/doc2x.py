@@ -411,6 +411,11 @@ class Doc2X:
         else:
             raise ValueError("Invalid output format, should be a string.")
 
+        if 'json' in output_format:
+            logger.warning(
+                "You have used JSON result output. The output will contain online links that expire in 24 hours. Please remember to manually save the results. (您使用了 json 结果输出，输出结果中会有 24h 过期的在线链接，请注意手动保存结果)"
+            )
+
         for fmt in output_formats:
             fmt = OutputFormat(fmt)
             if isinstance(fmt, OutputFormat):
