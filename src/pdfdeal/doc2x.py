@@ -164,7 +164,7 @@ async def parse_pdf(
         try:
             logger.info(f"Uploading {pdf_path}...")
             uid = await upload_pdf(apikey, pdf_path, oss_choose)
-            if export_history is not "":
+            if export_history != "":
                 await record_export_history(
                     csv_path=export_history,
                     uid=uid,
@@ -183,7 +183,7 @@ async def parse_pdf(
                     )
                     if status == "Success":
                         logger.info(f"Parsing successful for {pdf_path} with uid {uid}")
-                        if export_history is not "":
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -194,7 +194,7 @@ async def parse_pdf(
                         logger.info(f"Processing {uid} : {progress}%")
                         await asyncio.sleep(3)
                     else:
-                        if export_history is not "":
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -233,12 +233,13 @@ async def convert_to_format(
         max_time: int,
         merge_cross_page_forms: bool = False,
         save_subdir: bool = False,
-) -> str:
+    ) -> str:
     """Convert parsed PDF to specified format"""
     logger.info(f"Converting {uid} to {output_format}...")
     status, url = await convert_parse(
         apikey, uid, output_format, merge_cross_page_forms=merge_cross_page_forms
     )
+
     for _ in range(max_time // 3):
         if status == "Success":
             logger.info(f"Downloading {uid} {output_format} file to {output_path}...")
@@ -262,7 +263,8 @@ async def save_json_format(
         output_path: str,
         output_name: str,
         json_content: list[dict] = None,
-):
+        save_subdir: bool = False,
+    ):
     """Save the JSON file
     Args:
     output_path (str): The path to save the JSON file
@@ -270,13 +272,16 @@ async def save_json_format(
     json_content (list[dict]): The JSON content to save
     """
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
+    saved_path = await loop.run_in_executor(
         None,
         save_json,
         output_path,
         output_name,
-        json_content
+        json_content,
+        save_subdir,
     )
+
+    return saved_path
 
 
 class Doc2X:
@@ -376,6 +381,7 @@ class Doc2X:
             save_subdir: bool = False,
             export_history: str = "",
     ) -> Tuple[List[str], List[dict], bool]:
+
         if isinstance(pdf_file, str):
             if os.path.isdir(pdf_file):
                 pdf_file, output_names = get_files(
@@ -522,6 +528,7 @@ class Doc2X:
                         async with page_lock:
                             last_request_time = time.time()
 
+
                         result = await convert_to_format(
                             apikey=self.apikey,
                             uid=uid,
@@ -532,7 +539,7 @@ class Doc2X:
                             merge_cross_page_forms=merge_cross_page_forms,
                             save_subdir=save_subdir
                         )
-                        if export_history is not "":
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -551,16 +558,24 @@ class Doc2X:
                             result = texts
                         elif fmt == "text":
                             result = "\n".join(texts)
-                        elif fmt == "detailed" or fmt == "json":
+                        elif fmt == "detailed":
                             result = [
                                 {"text": text, "location": loc}
                                 for text, loc in zip(texts, locations)
                             ]
-                            if fmt == "json":
-                                await save_json_format(output_path=os.path.join(output_path, os.path.dirname(name_fmt)),
-                                                       output_name=os.path.basename(name_fmt),
-                                                       json_content=result)
-                        if export_history is not "":
+
+                        elif fmt == "json":
+                            json_content = [
+                                {"text": text, "location": loc}
+                                for text, loc in zip(texts, locations)
+                            ]
+                            result = await save_json_format(output_path=os.path.join(output_path, os.path.dirname(name_fmt)),
+                                                            output_name=os.path.basename(name_fmt),
+                                                            json_content=json_content,
+                                                            save_subdir=save_subdir)
+
+
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -593,12 +608,12 @@ class Doc2X:
 
         # Create and run parse tasks with controlled concurrency
 
-        if export_history is not "":
+        if export_history != "":
             file_export_map = await read_export_history(export_history)
             print(f"export_history{file_export_map}")
 
         for i, (pdf, name) in enumerate(zip(pdf_file, output_names)):
-            if export_history is not "":
+            if export_history != "":
                 if file_export_map.get(pdf, False) is True:
                     results[i] = ('', '', '')
                     continue
@@ -622,7 +637,7 @@ class Doc2X:
             await asyncio.wait(convert_tasks)
         else:
             logger.warning("No successful parse tasks, skipping conversion.")
-        print(results)
+
         if full_speed:
             logger.info(f"Convert tasks done with {max_threads} threads.")
         success_files = []

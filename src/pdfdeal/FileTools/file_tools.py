@@ -407,6 +407,7 @@ def save_json(
     output_path: str,
     output_name: str,
     json_content: list[dict] = None,
+    save_subdir: bool = False,
 ):
     """Save the JSON file
     Args:
@@ -414,17 +415,20 @@ def save_json(
         output_name(str):  JSON file name
         json_content (list[dict]): The JSON content to save
     """
-    print(f"output path:{output_path}, output_name:{output_name}", )
     if json_content is None:
         json_content = []
     base_name, _ = os.path.splitext(output_name)
+
+    if save_subdir:
+        output_path = os.path.join(output_path, base_name)
+    
     json_filename = f"{base_name}.json"  # 例如 "sample.json"
     final_json_path = os.path.join(output_path, json_filename)
     os.makedirs(output_path, exist_ok=True)
     with open(final_json_path, 'w', encoding='utf-8') as f:
         json.dump(json_content, f, ensure_ascii=False, indent=4)
 
-
+    return final_json_path
 
 
 
