@@ -25,7 +25,6 @@ from .doc2x_img import ImageProcessor
 logger = logging.getLogger(name="pdfdeal.doc2x")
 
 
-# export_history流程
 async def record_export_history(
         csv_path: str,
         uid: str,
@@ -35,6 +34,7 @@ async def record_export_history(
         is_export: bool = False,
         lock: asyncio.Lock = None,
 ):
+    """Record history using csv"""
     csv_header = ["uid", "file_name", "upload_time_str", "status", "is_export"]
     async with lock:
         update_data = {}
@@ -99,6 +99,7 @@ async def record_export_history(
 
 
 async def read_export_history(csv_path: str) -> Dict[str, bool]:
+    """Read export history from csv_path"""
     file_to_export_status_map: Dict[str, bool] = {}
     if not await aiofiles.os.path.exists(csv_path):
         return file_to_export_status_map
@@ -138,7 +139,7 @@ async def parse_pdf(
         max_time: int,
         convert: bool,
         oss_choose: str = "auto",
-        export_history: str = '',
+        export_history: str = "",
 ) -> Tuple[str, List[str], List[dict]]:
     """Parse PDF file and return uid and extracted text"""
 
@@ -373,7 +374,7 @@ class Doc2X:
             oss_choose: str = "auto",
             merge_cross_page_forms: bool = False,
             save_subdir: bool = False,
-            export_history: str = '',
+            export_history: str = "",
     ) -> Tuple[List[str], List[dict], bool]:
         if isinstance(pdf_file, str):
             if os.path.isdir(pdf_file):
@@ -558,7 +559,7 @@ class Doc2X:
                             if fmt == "json":
                                 await save_json_format(output_path=os.path.join(output_path, os.path.dirname(name_fmt)),
                                                        output_name=os.path.basename(name_fmt),
-                                                       jsosn_content=result)
+                                                       json_content=result)
                         if export_history is not "":
                             await record_export_history(
                                 csv_path=export_history,
@@ -592,14 +593,15 @@ class Doc2X:
 
         # Create and run parse tasks with controlled concurrency
 
-        if export_history is not None:
+        if export_history is not "":
             file_export_map = await read_export_history(export_history)
             print(f"export_history{file_export_map}")
 
         for i, (pdf, name) in enumerate(zip(pdf_file, output_names)):
-            if file_export_map[pdf] is True:
-                results[i] = ('', '', '')
-                continue
+            if export_history is not "":
+                if file_export_map.get(pdf, False) is True:
+                    results[i] = ('', '', '')
+                    continue
             while len(parse_tasks) >= max_threads:
                 done, parse_tasks = await asyncio.wait(
                     parse_tasks, return_when=asyncio.FIRST_COMPLETED
@@ -670,7 +672,7 @@ class Doc2X:
             merge_cross_page_forms: bool = False,
             ocr: bool = False,
             save_subdir: bool = False,
-            export_history: str = '',
+            export_history: str = "",
     ) -> Tuple[List[str], List[dict], bool]:
         """Convert PDF file to specified format
         Args:

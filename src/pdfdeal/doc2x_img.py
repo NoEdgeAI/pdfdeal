@@ -29,7 +29,7 @@ class ImageProcessor:
         if self._lock is None:
             # Get the loop from the current async context
             self._loop = asyncio.get_running_loop()
-            self._lock = asyncio.Lock(loop=self._loop) # Pass the loop explicitly
+            self._lock = asyncio.Lock() # Pass the loop explicitly
         return self._lock
 
     async def _check_rate_limit(self):
