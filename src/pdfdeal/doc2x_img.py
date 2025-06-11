@@ -57,7 +57,7 @@ class ImageProcessor:
                 await asyncio.sleep(wait_time)
 
     async def process_image(
-        self, image_path: str, process_type: str = "layout", zip_path: str = None
+        self, image_path: str, process_type: str = "layout", zip_path: str = None, output_name: str = None
     ) -> tuple[list, str, bool]:
         """Process an image with layout analysis
 
@@ -65,7 +65,7 @@ class ImageProcessor:
             image_path (str): Path to the image file
             process_type (str): Type of processing, can be 'layout'
             zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
-
+            output_name (str): output file name. Defaults to None.
         Returns:
             Tuple containing:
                 - The processing result (list of pages for layout)
@@ -83,7 +83,7 @@ class ImageProcessor:
             logger.info(f"Starting {process_type} processing for {image_path}")
             if process_type == "layout":
                 await self._check_rate_limit()
-                pages, uid = await parse_image_layout(self.apikey, image_path, zip_path)
+                pages, uid = await parse_image_layout(self.apikey, image_path, zip_path, output_name)
                 logger.info(
                     f"Successfully completed layout analysis for {image_path} with uid {uid}"
                 )
@@ -106,6 +106,7 @@ class ImageProcessor:
         process_type: str = "layout",
         concurrent_limit: int = 5,
         zip_path: str = None,
+        output_zip_names: List[str] = None,
     ) -> tuple[List[list], Dict[str, bool]]:
         """Process multiple images concurrently with rate limiting
 
@@ -114,7 +115,7 @@ class ImageProcessor:
             process_type (str): Type of processing, can be 'layout'
             concurrent_limit (int): Maximum number of concurrent processing tasks
             zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
-
+            output_zip_names (List[str]): List of zip file name
         Returns:
             Tuple containing:
                 - List of processing results in order (empty list for failed items)
@@ -127,8 +128,10 @@ class ImageProcessor:
             index: int,
         ) -> tuple[int, str, tuple[list, str, bool]]:
             async with semaphore:
+                print(index, output_zip_names)
                 logger.debug(f"Processing image {index + 1}/{len(image_paths)}: {path}")
-                result = await self.process_image(path, process_type, zip_path)
+                output_name = output_zip_names[index] if output_zip_names else None
+                result = await self.process_image(path, process_type, zip_path, output_name)
                 return index, path, result
 
         tasks = [process_with_semaphore(path, i) for i, path in enumerate(image_paths)]
@@ -160,21 +163,13 @@ class ImageProcessor:
         process_type: str = "layout",
         concurrent_limit: Optional[int] = None,
         zip_path: str = None,
+        output_zip_names: List[str] = None,
     ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Process image files with layout analysis
 
         Args:
             pic_file (str | List[str]): Path to image file(s) or directory
             process_type (str): Type of processing, can be 'layout'
-        process_type: str = "ocr",
-        concurrent_limit: Optional[int] = None,
-        zip_path: str = None,
-    ) -> tuple[List[Union[list, str]], List[dict], bool]:
-        """Process image files with OCR or layout analysis
-
-        Args:
-            pic_file (str | List[str]): Path to image file(s) or directory
-            process_type (str): Type of processing, can be 'ocr' or 'layout'
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
             zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
 
@@ -186,7 +181,7 @@ class ImageProcessor:
         """
         if isinstance(pic_file, str):
             if os.path.isdir(pic_file):
-                pic_file, _ = get_files(path=pic_file, mode="pic")
+                pic_file, output_zip_names = get_files(path=pic_file, mode="img", out="zip")
             else:
                 pic_file = [pic_file]
 
@@ -195,6 +190,7 @@ class ImageProcessor:
             process_type=process_type,
             concurrent_limit=concurrent_limit or 5,
             zip_path=zip_path,
+            output_zip_names=output_zip_names,
         )
 
         failed_files = []

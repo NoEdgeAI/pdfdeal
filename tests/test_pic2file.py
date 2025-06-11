@@ -25,9 +25,8 @@ def test_single_pic2file():
 
 def test_multiple_pic2file():
     client = Doc2X()
-    file_list, rename = get_files("tests/image", "img", "docx")
     results, errors, has_error = client.piclayout(
-        pic_file=file_list,
+        pic_file="tests/image",
         zip_path="./Output/test/multiple/",
     )
     assert isinstance(results, list)  # 返回值应该是列表类型
@@ -39,14 +38,14 @@ def test_multiple_pic2file():
 
 def test_multiple_high_rpm():
     client = Doc2X()
-    time.sleep(30)
-    file_list = ["tests/image/sample.png" for _ in range(31)] #测试处理上限是否为30s/30 req
+    file_list = ["tests/image/sample.png" for _ in range(30)] #测试处理上限是否为30s/30 req
     results, errors, has_error = client.piclayout(
         pic_file=file_list,
         zip_path="./Output/test/highrpm/",
     )
     assert not has_error
     assert isinstance(results, list)  # 返回值应该是列表类型
+    assert len(results) == 30
     assert isinstance(errors[0], dict)
     assert "error" in errors[0]
     assert "path" in errors[0]

@@ -363,7 +363,11 @@ async def get_convert_result(apikey: str, uid: str) -> Tuple[str, str]:
 
 @async_retry()
 async def download_file(
-        url: str, file_type: str, target_folder: str, target_filename: str
+        url: str,
+        file_type: str,
+        target_folder: str,
+        target_filename: str,
+        save_subdir: bool = False,
 ) -> str:
     """
     Download a file from the given URL to the specified target folder with the given filename.
@@ -373,6 +377,7 @@ async def download_file(
         file_type (str): The type of file being downloaded (e.g., 'zip', 'docx').
         target_folder (str): The folder where the file should be saved.
         target_filename (str): The desired filename for the downloaded file, can include subdirectories.
+        save_subdir(bool, optional): Save the output to a subfolder under output_path. Defaults to False.
 
     Raises:
         Exception: If there's an error creating the target folder or downloading the file.
@@ -383,8 +388,9 @@ async def download_file(
     target_path = os.path.join(target_folder, target_filename)
     target_dir = os.path.dirname(target_path)
     filename = os.path.basename(target_path)
+    if save_subdir:
+        target_dir = os.path.join(target_dir, os.path.splitext(os.path.basename(filename))[0])
     os.makedirs(target_dir, exist_ok=True)
-
     filename = os.path.splitext(filename)[0]
     if file_type != "docx":
         file_type = "zip"
@@ -427,7 +433,7 @@ async def image_code_check(code: str, trace_id: str = None):
 
 @async_retry()
 async def parse_image_layout(
-        apikey: str, image_path: str, zip_path: str = None
+        apikey: str, image_path: str, zip_path: str = None, output_name: str = None
 ) -> tuple[list, str]:
     """Parse image layout
 
@@ -435,7 +441,7 @@ async def parse_image_layout(
         apikey (str): The API key
         image_path (str): Path to the image file
         zip_path (str, optional): Path to save the zip file containing images. Defaults to image_name + 'picture.zip'.
-
+        output_name (str): output file name. Defaults to None.
     Raises:
         FileError: If file size exceeds limit or file cannot be opened
         RateLimit: If rate limit is reached
@@ -449,8 +455,10 @@ async def parse_image_layout(
     """
     # Use the image name as the prefix for the zip file name
     default_zip_filename = os.path.splitext(os.path.basename(image_path))[0]
-    new_zip_filename = f"{default_zip_filename}picture.zip"
-    
+    print(f"default zip name{default_zip_filename}")
+    if output_name is not None:
+        default_zip_filename = output_name
+    new_zip_filename = default_zip_filename
     # Use zip_path + image name + picture.zip to name zip files
     if zip_path is None:
         parent_directory = os.path.dirname(image_path)

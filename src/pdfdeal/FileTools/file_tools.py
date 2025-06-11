@@ -1,4 +1,5 @@
 import io
+import json
 import re
 import unicodedata
 import os
@@ -400,3 +401,31 @@ def auto_split_mds(
                     f"=====\nError deal with {failed_file['file']} : {failed_file['error']}"
                 )
     return success, failed, flag
+
+
+def save_json(
+    output_path: str,
+    output_name: str,
+    json_content: list[dict] = None,
+):
+    """Save the JSON file
+    Args:
+        output_path (str): The path to save the JSON file
+        output_name(str):  JSON file name
+        json_content (list[dict]): The JSON content to save
+    """
+    print(f"output path:{output_path}, output_name:{output_name}", )
+    if json_content is None:
+        json_content = []
+    base_name, _ = os.path.splitext(output_name)
+    json_filename = f"{base_name}.json"  # 例如 "sample.json"
+    final_json_path = os.path.join(output_path, json_filename)
+    os.makedirs(output_path, exist_ok=True)
+    with open(final_json_path, 'w', encoding='utf-8') as f:
+        json.dump(json_content, f, ensure_ascii=False, indent=4)
+
+
+
+
+
+
