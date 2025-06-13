@@ -205,6 +205,9 @@ class ImageProcessor:
                 logger.error(f"Failed to process {path}")
             else:
                 failed_files.append({"error": "", "path": ""})
+                for r in results:
+                    r[0]['path'] = path
+
                 final_results.append(results[i])
                 success_count += 1
                 logger.debug(f"Successfully processed {path}")
