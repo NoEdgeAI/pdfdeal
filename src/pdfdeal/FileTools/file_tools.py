@@ -423,9 +423,18 @@ def save_json(
     if save_subdir:
         output_path = os.path.join(output_path, base_name)
     
-    json_filename = f"{base_name}.json"  # 例如 "sample.json"
-    final_json_path = os.path.join(output_path, json_filename)
+    final_json_path = os.path.join(output_path, f"{base_name}.json")
+
+
+
     os.makedirs(output_path, exist_ok=True)
+
+    # 处理重复名字的文件
+    counter = 1
+    while os.path.exists(final_json_path):
+        final_json_path = os.path.join(output_path, f"{base_name}_{counter}.json")
+        counter += 1
+
     with open(final_json_path, 'w', encoding='utf-8') as f:
         json.dump(json_content, f, ensure_ascii=False, indent=4)
 

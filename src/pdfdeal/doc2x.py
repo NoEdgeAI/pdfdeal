@@ -294,7 +294,7 @@ class Doc2X:
             max_time: int = 300,
             debug: bool = False,
             full_speed: bool = False,
-    ) -> None:
+        ) -> None:
         """
         Initialize a Doc2X client.
 
@@ -346,14 +346,14 @@ class Doc2X:
     def piclayout(
             self,
             pic_file,
-            zip_path: Optional[str] = None,
+            output_path: str = "./Output",
             concurrent_limit: Optional[int] = 5,
-    ) -> tuple[List[Union[list, str]], List[dict], bool]:
+        ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Process image files with layout analysis
 
         Args:
             pic_file (str | List[str]): Path to image files (jpg/png)
-            zip_path (str, optional): Path to save the zip file containing images. Defaults to None.
+            output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to 5.
 
         Returns:
@@ -362,11 +362,15 @@ class Doc2X:
                 - List of dictionaries containing error information
                 - Boolean indicating if any errors occurred
         """
+
+        if not os.path.isdir(output_path):
+            raise ValueError("output_path must be a directory")
+
         return self.image_processor.pic2file(
             pic_file=pic_file,
             process_type="layout",
+            output_path=output_path,
             concurrent_limit=concurrent_limit,
-            zip_path=zip_path,
         )
 
     async def pdf2file_back(
@@ -380,7 +384,7 @@ class Doc2X:
             merge_cross_page_forms: bool = False,
             save_subdir: bool = False,
             export_history: str = "",
-    ) -> Tuple[List[str], List[dict], bool]:
+        ) -> Tuple[List[str], List[dict], bool]:
 
         if isinstance(pdf_file, str):
             if os.path.isdir(pdf_file):
@@ -692,8 +696,8 @@ class Doc2X:
             merge_cross_page_forms: bool = False,
             ocr: bool = False,
             save_subdir: bool = False,
-            export_history: str = "",
-    ) -> Tuple[List[str], List[dict], bool]:
+            
+        ) -> Tuple[List[str], List[dict], bool]:
         """Convert PDF file to specified format
         Args:
             pdf_file (str or list): The path of the PDF file or a list of PDF file paths
@@ -712,6 +716,10 @@ class Doc2X:
                 - List[dict]: List of error messages
                 - bool: Whether there was an error
         """
+
+        # 未完全测试完
+        export_history = ""
+
         if ocr:
             import warnings
 

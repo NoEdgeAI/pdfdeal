@@ -57,15 +57,15 @@ class ImageProcessor:
                 await asyncio.sleep(wait_time)
 
     async def process_image(
-        self, image_path: str, process_type: str = "layout", zip_path: str = None, output_name: str = None
+        self, image_path: str, process_type: str = "layout", output_path: str = None
     ) -> tuple[list, str, bool]:
         """Process an image with layout analysis
 
         Args:
             image_path (str): Path to the image file
             process_type (str): Type of processing, can be 'layout'
-            zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
-            output_name (str): output file name. Defaults to None.
+            output_path (str, optional): Path to save the result json and decoded base64 image zip. Defaults to Output.
+
         Returns:
             Tuple containing:
                 - The processing result (list of pages for layout)
@@ -76,6 +76,8 @@ class ImageProcessor:
             ValueError: If process_type is invalid or file type is not supported
             RateLimit: If rate limit is exceeded
         """
+
+
         if process_type not in ["layout"]:
             raise ValueError("process_type must be one of: 'layout'")
 
@@ -83,12 +85,12 @@ class ImageProcessor:
             logger.info(f"Starting {process_type} processing for {image_path}")
             if process_type == "layout":
                 await self._check_rate_limit()
-                pages, uid = await parse_image_layout(self.apikey, image_path, zip_path, output_name)
+                pages, uid, output_zip_path = await parse_image_layout(self.apikey, image_path, output_path)
                 logger.info(
                     f"Successfully completed layout analysis for {image_path} with uid {uid}"
                 )
-                if zip_path:
-                    logger.info(f"Layout results saved to zip file at {zip_path}")
+                if output_zip_path != '':
+                    logger.info(f"Layout results saved to zip file at {output_zip_path}")
                 return pages, uid, True
             else:
                 logger.error(f"Error process_type: {process_type}")
@@ -105,8 +107,7 @@ class ImageProcessor:
         image_paths: List[str],
         process_type: str = "layout",
         concurrent_limit: int = 5,
-        zip_path: str = None,
-        output_zip_names: List[str] = None,
+        output_path: str = 'Output/',
     ) -> tuple[List[list], Dict[str, bool]]:
         """Process multiple images concurrently with rate limiting
 
@@ -114,8 +115,7 @@ class ImageProcessor:
             image_paths (List[str]): List of image file paths
             process_type (str): Type of processing, can be 'layout'
             concurrent_limit (int): Maximum number of concurrent processing tasks
-            zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
-            output_zip_names (List[str]): List of zip file name
+            output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
         Returns:
             Tuple containing:
                 - List of processing results in order (empty list for failed items)
@@ -128,10 +128,9 @@ class ImageProcessor:
             index: int,
         ) -> tuple[int, str, tuple[list, str, bool]]:
             async with semaphore:
-                print(index, output_zip_names)
                 logger.debug(f"Processing image {index + 1}/{len(image_paths)}: {path}")
-                output_name = output_zip_names[index] if output_zip_names else None
-                result = await self.process_image(path, process_type, zip_path, output_name)
+
+                result = await self.process_image(path, process_type, output_path)
                 return index, path, result
 
         tasks = [process_with_semaphore(path, i) for i, path in enumerate(image_paths)]
@@ -161,9 +160,8 @@ class ImageProcessor:
         self,
         pic_file,
         process_type: str = "layout",
+        output_path: str = "./Output",
         concurrent_limit: Optional[int] = None,
-        zip_path: str = None,
-        output_zip_names: List[str] = None,
     ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Process image files with layout analysis
 
@@ -171,7 +169,7 @@ class ImageProcessor:
             pic_file (str | List[str]): Path to image file(s) or directory
             process_type (str): Type of processing, can be 'layout'
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
-            zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
+            output_path (str): Path to save the result json and decoded base64 image zip .Defaults to Output.
 
         Returns:
             Tuple containing:
@@ -181,16 +179,16 @@ class ImageProcessor:
         """
         if isinstance(pic_file, str):
             if os.path.isdir(pic_file):
-                pic_file, output_zip_names = get_files(path=pic_file, mode="img", out="zip")
+                pic_file, _ = get_files(path=pic_file, mode="img", out="zip")
             else:
                 pic_file = [pic_file]
+                
 
         results, success_status = await self.process_multiple_images(
             image_paths=pic_file,
             process_type=process_type,
             concurrent_limit=concurrent_limit or 5,
-            zip_path=zip_path,
-            output_zip_names=output_zip_names,
+            output_path=output_path,
         )
 
         failed_files = []
@@ -225,8 +223,8 @@ class ImageProcessor:
         self,
         pic_file,
         process_type: str = "layout",
+        output_path: str = 'Output',
         concurrent_limit: Optional[int] = None,
-        zip_path: str = None,
     ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Synchronous wrapper for pic2file_back
 
@@ -234,7 +232,7 @@ class ImageProcessor:
             pic_file (str | List[str]): Path to image file(s) or directory
             process_type (str): Type of processing, can be 'layout'
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
-            zip_path (str, optional): Path to save the zip file for layout analysis. Defaults to None.
+            output_path (str): Path to save the result json and decoded base64 image zip .Defaults to Output.
 
         Returns:
             Same as pic2file_back
@@ -243,7 +241,7 @@ class ImageProcessor:
             self.pic2file_back(
                 pic_file=pic_file,
                 process_type=process_type,
+                output_path=output_path,
                 concurrent_limit=concurrent_limit,
-                zip_path=zip_path,
             )
         )
