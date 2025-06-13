@@ -91,6 +91,9 @@ class ImageProcessor:
                 )
                 if output_zip_path != '':
                     logger.info(f"Layout results saved to zip file at {output_zip_path}")
+
+                pages[0]['zip_path'] = output_zip_path
+                pages[0]['image_path'] = image_path
                 return pages, uid, True
             else:
                 logger.error(f"Error process_type: {process_type}")
@@ -124,9 +127,9 @@ class ImageProcessor:
         semaphore = asyncio.Semaphore(concurrent_limit)
 
         async def process_with_semaphore(
-            path: str,
-            index: int,
-        ) -> tuple[int, str, tuple[list, str, bool]]:
+                path: str,
+                index: int,
+            ) -> tuple[int, str, tuple[list, str, bool]]:
             async with semaphore:
                 logger.debug(f"Processing image {index + 1}/{len(image_paths)}: {path}")
 
@@ -205,9 +208,6 @@ class ImageProcessor:
                 logger.error(f"Failed to process {path}")
             else:
                 failed_files.append({"error": "", "path": ""})
-                for r in results:
-                    r[0]['path'] = path
-
                 final_results.append(results[i])
                 success_count += 1
                 logger.debug(f"Successfully processed {path}")
