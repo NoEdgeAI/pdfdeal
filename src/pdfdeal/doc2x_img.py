@@ -4,11 +4,36 @@ from collections import deque
 from typing import Dict, List, Optional, Union
 from .Doc2X.ConvertV2 import parse_image_layout
 from .Doc2X.Exception import RateLimit, run_async
-from .FileTools.file_tools import get_files
+from .Doc2X.Types import OutputFormat
+from .FileTools.file_tools import get_files, save_md
 import os
+import copy
 
 logger = logging.getLogger("pdfdeal.doc2x")
 
+async def save_md_format(
+        output_path: str,
+        output_name: str,
+        content: str = '',
+        save_subdir: bool = False,
+    ):
+    """Save the text to md file 
+    Args:
+    output_path (str): The path to save the MD file
+    output_name(str): MD file name
+    content (list[dict]): The MD content to save
+    """
+    loop = asyncio.get_running_loop()
+    saved_path, fail_reason = await loop.run_in_executor(
+        None,
+        save_md,
+        output_path,
+        output_name,
+        content,
+        save_subdir,
+    )
+
+    return saved_path, fail_reason
 
 class ImageProcessor:
     """Image processor with rate limiting support"""
@@ -56,9 +81,13 @@ class ImageProcessor:
                 )
                 await asyncio.sleep(wait_time)
 
+
     async def process_image(
-        self, image_path: str, process_type: str = "layout", output_path: str = None
-    ) -> tuple[list, str, bool]:
+            self, 
+            image_path: str, 
+            process_type: str = "layout", 
+            output_path: str = 'Output'
+        ) -> tuple[list, str, bool]:
         """Process an image with layout analysis
 
         Args:
@@ -71,6 +100,7 @@ class ImageProcessor:
                 - The processing result (list of pages for layout)
                 - The uid of the processed image
                 - Boolean indicating if the processing was successful
+                - The failure information
 
         Raises:
             ValueError: If process_type is invalid or file type is not supported
@@ -93,8 +123,9 @@ class ImageProcessor:
                     logger.info(f"Layout results saved to zip file at {output_zip_path}")
 
                 pages[0]['zip_path'] = output_zip_path
-                pages[0]['image_path'] = image_path
-                return pages, uid, True
+                pages[0]['path'] = image_path
+
+                return pages, uid, True, ""
             else:
                 logger.error(f"Error process_type: {process_type}")
                 raise ValueError(f"Unsupported process_type: '{process_type}'")
@@ -103,11 +134,12 @@ class ImageProcessor:
             raise
         except Exception as e:
             logger.error(f"Error processing image {image_path}: {str(e)}")
-            return [], "", False
+            return [], "", False, str(e)
 
     async def process_multiple_images(
         self,
         image_paths: List[str],
+        output_format: str = 'text',
         process_type: str = "layout",
         concurrent_limit: int = 5,
         output_path: str = 'Output/',
@@ -117,8 +149,10 @@ class ImageProcessor:
         Args:
             image_paths (List[str]): List of image file paths
             process_type (str): Type of processing, can be 'layout'
-            concurrent_limit (int): Maximum number of concurrent processing tasks
+            output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
             output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
+            concurrent_limit (int): Maximum number of concurrent processing tasks
+
         Returns:
             Tuple containing:
                 - List of processing results in order (empty list for failed items)
@@ -133,13 +167,83 @@ class ImageProcessor:
             async with semaphore:
                 logger.debug(f"Processing image {index + 1}/{len(image_paths)}: {path}")
 
-                result = await self.process_image(path, process_type, output_path)
-                return index, path, result
+                output_result, uid, is_success, fail_reasons = await self.process_image(path, process_type, output_path)
+
+                async def save_result_as_md(
+                    image_path: str,
+                    result
+                    ):
+
+                        all_results = []
+                        all_errors = []
+
+                        basename, ext = os.path.basename(image_path).split('.')
+
+                        output_formats = []
+
+
+                        if isinstance(output_format, str):
+                            if "," in output_format:
+                                output_formats = [fmt.strip() for fmt in output_format.split(",")]
+                            else:
+                                output_formats = [output_format]
+                        else:
+                            raise ValueError("Invalid output format, should be a string.")
+                        for fmt in output_formats:
+                            fmt = OutputFormat(fmt)
+                            if isinstance(fmt, OutputFormat):
+                                fmt = fmt.value
+
+
+                            if fmt in ["md", "md_dollar"]:
+                                if fmt == 'md_dollar':
+                                    new_result = copy.deepcopy(result)
+                                    new_result[0]['md'] = \
+                                        new_result[0]['md'].replace('\\[', '$$').replace('\\]', '$$').replace('\\(', '$').replace('\\)', '$')
+                                    
+                                    output_result, fail_reason = await save_md_format(
+                                        output_path=output_path,
+                                        output_name=f'{basename}_dollar.md',
+                                        content=new_result[0]['md'],
+                                        save_subdir=False,
+                                    )
+                                elif fmt == 'md':
+                                    new_result = copy.deepcopy(result)
+                                    output_result, fail_reason = await save_md_format(
+                                        output_path=output_path,
+                                        output_name=f'{basename}.md',
+                                        content=new_result[0]['md'],
+                                        save_subdir=False,
+                                    )
+                            elif fmt in ['text']:
+                                output_result = result
+                                # 此处只会出现 在保存中 出现的错误，text不保存，不会出现错误
+                                fail_reason = ''
+                            
+                            all_results.append(output_result)
+                            all_errors.append(fail_reason)
+                        
+                        return all_results, all_errors
+                        
+
+                # TODO 需要细致处理
+                if not is_success:
+                    results = []
+                    fail_reasons = fail_reasons
+                if is_success: 
+                    results, save_fail_reasons = await save_result_as_md(image_path=path, result=output_result)
+
+                    if all(x != '' for x in save_fail_reasons):
+                        fail_reasons = save_fail_reason
+                        is_success = False
+
+                return index, path, (results, fail_reasons, uid, is_success)
 
         tasks = [process_with_semaphore(path, i) for i, path in enumerate(image_paths)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         processed_results = [[] for _ in range(len(image_paths))]
+        fail_reasons = ['' for _ in range(len(image_paths))]
         success_status = {}
 
         success_count = 0
@@ -148,8 +252,10 @@ class ImageProcessor:
                 logger.error(f"Failed to process a file: {str(result)}")
                 continue
 
-            index, path, (result_list, _, success) = result
+            index, path, (result_list, fail_reason, _, success) = result
+
             processed_results[index] = result_list if success else []
+            fail_reasons[index] = fail_reason if not success else ''
             success_status[path] = success
             if success:
                 success_count += 1
@@ -157,20 +263,22 @@ class ImageProcessor:
         logger.info(
             f"Batch processing completed. Successfully processed {success_count}/{len(image_paths)} images"
         )
-        return processed_results, success_status
+        return processed_results, fail_reasons, success_status
 
     async def pic2file_back(
         self,
         pic_file,
         process_type: str = "layout",
+        output_format: str = 'text',
         output_path: str = "./Output",
         concurrent_limit: Optional[int] = None,
-    ) -> tuple[List[Union[list, str]], List[dict], bool]:
+        ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Process image files with layout analysis
 
         Args:
             pic_file (str | List[str]): Path to image file(s) or directory
             process_type (str): Type of processing, can be 'layout'
+            output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
             output_path (str): Path to save the result json and decoded base64 image zip .Defaults to Output.
 
@@ -185,14 +293,17 @@ class ImageProcessor:
                 pic_file, _ = get_files(path=pic_file, mode="img", out="zip")
             else:
                 pic_file = [pic_file]
-                
 
-        results, success_status = await self.process_multiple_images(
+
+        
+        success_results, failed_results, success_status = await self.process_multiple_images(
             image_paths=pic_file,
             process_type=process_type,
             concurrent_limit=concurrent_limit or 5,
             output_path=output_path,
+            output_format=output_format,
         )
+
 
         failed_files = []
         has_error = False
@@ -202,13 +313,13 @@ class ImageProcessor:
         success_count = 0
         for i, path in enumerate(pic_file):
             if not success_status.get(path, False):
-                failed_files.append({"error": "Processing failed", "path": path})
+                failed_files.append({"error": failed_results[i], "path": path}) 
                 final_results.append("")
                 has_error = True
-                logger.error(f"Failed to process {path}")
+                logger.error(f"Failed to process {path}, error: {failed_results[i]}")
             else:
                 failed_files.append({"error": "", "path": ""})
-                final_results.append(results[i])
+                final_results.append(success_results[i])
                 success_count += 1
                 logger.debug(f"Successfully processed {path}")
 
@@ -223,19 +334,22 @@ class ImageProcessor:
         return final_results, failed_files, has_error
 
     def pic2file(
-        self,
-        pic_file,
-        process_type: str = "layout",
-        output_path: str = 'Output',
-        concurrent_limit: Optional[int] = None,
-    ) -> tuple[List[Union[list, str]], List[dict], bool]:
+            self,
+            pic_file,
+            process_type: str = 'layout',
+            output_format: str = 'text',
+            output_path: str = 'Output',
+            concurrent_limit: Optional[int] = None,
+        ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Synchronous wrapper for pic2file_back
 
         Args:
             pic_file (str | List[str]): Path to image file(s) or directory
             process_type (str): Type of processing, can be 'layout'
-            concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
+            output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
             output_path (str): Path to save the result json and decoded base64 image zip .Defaults to Output.
+            concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
+
 
         Returns:
             Same as pic2file_back
@@ -244,6 +358,7 @@ class ImageProcessor:
             self.pic2file_back(
                 pic_file=pic_file,
                 process_type=process_type,
+                output_format=output_format,
                 output_path=output_path,
                 concurrent_limit=concurrent_limit,
             )

@@ -425,8 +425,6 @@ def save_json(
     
     final_json_path = os.path.join(output_path, f"{base_name}.json")
 
-
-
     os.makedirs(output_path, exist_ok=True)
 
     # 处理重复名字的文件
@@ -441,5 +439,45 @@ def save_json(
     return final_json_path
 
 
+# image 接口 导出md格式会使用该函数
+def save_md(
+    output_path: str,
+    output_name: str,
+    content: str = '',
+    save_subdir: bool = False,
+):
+    """Save the md file
+    Args:
+        output_path (str): The path to save the JSON file
+        output_name(str):  md file name
+        content (list[dict]): The md content to save
+    """
+
+    base_name, _ = os.path.splitext(output_name)
+
+    if save_subdir:
+        output_path = os.path.join(output_path, base_name)
+    
+    final_md_path = os.path.join(output_path, f"{base_name}.md")
+
+    os.makedirs(output_path, exist_ok=True)
+
+    # 处理重复名字的文件
+    counter = 1
+    while os.path.exists(final_md_path):
+        final_md_path = os.path.join(output_path, f"{base_name}_{counter}.md")
+        counter += 1
+
+    try:
+        with open(final_md_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    except Exception as e:
+        logging.error(f"Error occurs when saving to {final_md_path}: {str(e)}")
+
+        fail_reason = str(e) if str(e) else type(e).__name__
+        return '', fail_reason
+
+    return final_md_path, ''
 
 

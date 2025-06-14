@@ -467,8 +467,13 @@ async def parse_image_layout(
     """
 
     # Use the image name as the prefix for the zip file name
-    output_zip_filename = os.path.splitext(os.path.basename(image_path))[0] + '_images.zip'
-    zip_path = os.path.join(output_path, output_zip_filename)
+    output_zip_filename = os.path.splitext(os.path.basename(image_path))[0]
+    zip_path = os.path.join(output_path, output_zip_filename + '_images.zip')
+
+    counter = 1
+    while os.path.exists(zip_path):
+        zip_path = os.path.join(output_path, output_zip_filename + f'_images_{counter}.zip')
+        counter += 1
 
 
     if not os.path.exists(output_path):

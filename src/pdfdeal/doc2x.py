@@ -346,6 +346,7 @@ class Doc2X:
     def piclayout(
             self,
             pic_file,
+            output_format: str = "text",
             output_path: str = "./Output",
             concurrent_limit: Optional[int] = 5,
         ) -> tuple[List[Union[list, str]], List[dict], bool]:
@@ -353,6 +354,7 @@ class Doc2X:
 
         Args:
             pic_file (str | List[str]): Path to image files (jpg/png)
+            output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
             output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to 5.
 
@@ -369,6 +371,7 @@ class Doc2X:
         return self.image_processor.pic2file(
             pic_file=pic_file,
             process_type="layout",
+            output_format=output_format,
             output_path=output_path,
             concurrent_limit=concurrent_limit,
         )
