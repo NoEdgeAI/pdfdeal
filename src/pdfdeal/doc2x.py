@@ -164,7 +164,7 @@ async def parse_pdf(
         try:
             logger.info(f"Uploading {pdf_path}...")
             uid = await upload_pdf(apikey, pdf_path, oss_choose)
-            if export_history is not "":
+            if export_history != "":
                 await record_export_history(
                     csv_path=export_history,
                     uid=uid,
@@ -183,7 +183,7 @@ async def parse_pdf(
                     )
                     if status == "Success":
                         logger.info(f"Parsing successful for {pdf_path} with uid {uid}")
-                        if export_history is not "":
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -194,7 +194,7 @@ async def parse_pdf(
                         logger.info(f"Processing {uid} : {progress}%")
                         await asyncio.sleep(3)
                     else:
-                        if export_history is not "":
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -233,12 +233,13 @@ async def convert_to_format(
         max_time: int,
         merge_cross_page_forms: bool = False,
         save_subdir: bool = False,
-) -> str:
+    ) -> str:
     """Convert parsed PDF to specified format"""
     logger.info(f"Converting {uid} to {output_format}...")
     status, url = await convert_parse(
         apikey, uid, output_format, merge_cross_page_forms=merge_cross_page_forms
     )
+
     for _ in range(max_time // 3):
         if status == "Success":
             logger.info(f"Downloading {uid} {output_format} file to {output_path}...")
@@ -262,7 +263,8 @@ async def save_json_format(
         output_path: str,
         output_name: str,
         json_content: list[dict] = None,
-):
+        save_subdir: bool = False,
+    ):
     """Save the JSON file
     Args:
     output_path (str): The path to save the JSON file
@@ -270,13 +272,16 @@ async def save_json_format(
     json_content (list[dict]): The JSON content to save
     """
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
+    saved_path = await loop.run_in_executor(
         None,
         save_json,
         output_path,
         output_name,
-        json_content
+        json_content,
+        save_subdir,
     )
+
+    return saved_path
 
 
 class Doc2X:
@@ -289,7 +294,7 @@ class Doc2X:
             max_time: int = 300,
             debug: bool = False,
             full_speed: bool = False,
-    ) -> None:
+        ) -> None:
         """
         Initialize a Doc2X client.
 
@@ -341,14 +346,18 @@ class Doc2X:
     def piclayout(
             self,
             pic_file,
-            zip_path: Optional[str] = None,
+            output_format: str = "text",
+            output_path: str = "./Output",
+            save_subdir: bool = False,
             concurrent_limit: Optional[int] = 5,
-    ) -> tuple[List[Union[list, str]], List[dict], bool]:
+        ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Process image files with layout analysis
 
         Args:
             pic_file (str | List[str]): Path to image files (jpg/png)
-            zip_path (str, optional): Path to save the zip file containing images. Defaults to None.
+            output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
+            output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
+            save_subdir (bool): Save the output to a subfolder under output_path. Defaults to False.
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to 5.
 
         Returns:
@@ -357,11 +366,20 @@ class Doc2X:
                 - List of dictionaries containing error information
                 - Boolean indicating if any errors occurred
         """
+
+        if os.path.exists(output_path):
+            if not os.path.isdir(output_path):
+                raise ValueError("output_path must be a directory")
+        else:
+            os.makedirs(output_path, exist_ok=True)
+
         return self.image_processor.pic2file(
             pic_file=pic_file,
             process_type="layout",
+            output_format=output_format,
+            output_path=output_path,
+            save_subdir=save_subdir,
             concurrent_limit=concurrent_limit,
-            zip_path=zip_path,
         )
 
     async def pdf2file_back(
@@ -375,7 +393,8 @@ class Doc2X:
             merge_cross_page_forms: bool = False,
             save_subdir: bool = False,
             export_history: str = "",
-    ) -> Tuple[List[str], List[dict], bool]:
+        ) -> Tuple[List[str], List[dict], bool]:
+
         if isinstance(pdf_file, str):
             if os.path.isdir(pdf_file):
                 pdf_file, output_names = get_files(
@@ -404,6 +423,11 @@ class Doc2X:
                 output_formats = [output_format]
         else:
             raise ValueError("Invalid output format, should be a string.")
+
+        if 'json' in output_format:
+            logger.warning(
+                "You have used JSON result output. The output will contain online links that expire in 24 hours. Please remember to manually save the results. (您使用了 json 结果输出，输出结果中会有 24h 过期的在线链接，请注意手动保存结果)"
+            )
 
         for fmt in output_formats:
             fmt = OutputFormat(fmt)
@@ -522,6 +546,7 @@ class Doc2X:
                         async with page_lock:
                             last_request_time = time.time()
 
+
                         result = await convert_to_format(
                             apikey=self.apikey,
                             uid=uid,
@@ -532,7 +557,7 @@ class Doc2X:
                             merge_cross_page_forms=merge_cross_page_forms,
                             save_subdir=save_subdir
                         )
-                        if export_history is not "":
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -551,16 +576,24 @@ class Doc2X:
                             result = texts
                         elif fmt == "text":
                             result = "\n".join(texts)
-                        elif fmt == "detailed" or fmt == "json":
+                        elif fmt == "detailed":
                             result = [
                                 {"text": text, "location": loc}
                                 for text, loc in zip(texts, locations)
                             ]
-                            if fmt == "json":
-                                await save_json_format(output_path=os.path.join(output_path, os.path.dirname(name_fmt)),
-                                                       output_name=os.path.basename(name_fmt),
-                                                       json_content=result)
-                        if export_history is not "":
+
+                        elif fmt == "json":
+                            json_content = [
+                                {"text": text, "location": loc}
+                                for text, loc in zip(texts, locations)
+                            ]
+                            result = await save_json_format(output_path=os.path.join(output_path, os.path.dirname(name_fmt)),
+                                                            output_name=os.path.basename(name_fmt),
+                                                            json_content=json_content,
+                                                            save_subdir=save_subdir)
+
+
+                        if export_history != "":
                             await record_export_history(
                                 csv_path=export_history,
                                 uid=uid,
@@ -593,12 +626,12 @@ class Doc2X:
 
         # Create and run parse tasks with controlled concurrency
 
-        if export_history is not "":
+        if export_history != "":
             file_export_map = await read_export_history(export_history)
             print(f"export_history{file_export_map}")
 
         for i, (pdf, name) in enumerate(zip(pdf_file, output_names)):
-            if export_history is not "":
+            if export_history != "":
                 if file_export_map.get(pdf, False) is True:
                     results[i] = ('', '', '')
                     continue
@@ -622,7 +655,7 @@ class Doc2X:
             await asyncio.wait(convert_tasks)
         else:
             logger.warning("No successful parse tasks, skipping conversion.")
-        print(results)
+
         if full_speed:
             logger.info(f"Convert tasks done with {max_threads} threads.")
         success_files = []
@@ -672,8 +705,7 @@ class Doc2X:
             merge_cross_page_forms: bool = False,
             ocr: bool = False,
             save_subdir: bool = False,
-            export_history: str = "",
-    ) -> Tuple[List[str], List[dict], bool]:
+        ) -> Tuple[List[str], List[dict], bool]:
         """Convert PDF file to specified format
         Args:
             pdf_file (str or list): The path of the PDF file or a list of PDF file paths
@@ -684,7 +716,7 @@ class Doc2X:
             oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
             merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
             ocr (bool, optional): This option is deprecated and will not be used.
-            save_subdir(bool, optional): Save the output to a subfolder under output_path. Defaults to False.
+            save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
             export_history(str, optional): Export history file. Defaults to None.
         Returns:
             Tuple[List[str], List[dict], bool]: A tuple containing:
@@ -692,6 +724,10 @@ class Doc2X:
                 - List[dict]: List of error messages
                 - bool: Whether there was an error
         """
+
+        # 未完全测试完
+        export_history = ""
+
         if ocr:
             import warnings
 

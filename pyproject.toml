@@ -1,6 +1,6 @@
 [project]
 name = "pdfdeal"
-version = "1.0.3"
+version = "1.0.4"
 authors = [{ name = "noedgeai", email = "support@noedgeai.com" }]
 description = "Python SDK for Doc2X API and some native texts processing (to improve texts recall in RAG)."
 readme = "README.md"

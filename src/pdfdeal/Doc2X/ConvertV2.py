@@ -377,7 +377,7 @@ async def download_file(
         file_type (str): The type of file being downloaded (e.g., 'zip', 'docx').
         target_folder (str): The folder where the file should be saved.
         target_filename (str): The desired filename for the downloaded file, can include subdirectories.
-        save_subdir(bool, optional): Save the output to a subfolder under output_path. Defaults to False.
+        save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
 
     Raises:
         Exception: If there's an error creating the target folder or downloading the file.
@@ -385,6 +385,8 @@ async def download_file(
     Returns:
         str: The full path of the downloaded file.
     """
+
+
     target_path = os.path.join(target_folder, target_filename)
     target_dir = os.path.dirname(target_path)
     filename = os.path.basename(target_path)
@@ -392,8 +394,18 @@ async def download_file(
         target_dir = os.path.join(target_dir, os.path.splitext(os.path.basename(filename))[0])
     os.makedirs(target_dir, exist_ok=True)
     filename = os.path.splitext(filename)[0]
+
+    # 导出 md/tex时，在文件名最后加后缀
+    zip_file_suffix = ''
+    if file_type in ['md', 'md_dollar', 'tex']:
+        zip_file_suffix = file_type
+
     if file_type != "docx":
         file_type = "zip"
+
+
+    filename = f'{filename}_{zip_file_suffix}'
+    
     file_path = os.path.join(target_dir, f"{filename}.{file_type}")
     counter = 1
     while os.path.exists(file_path):
@@ -433,15 +445,15 @@ async def image_code_check(code: str, trace_id: str = None):
 
 @async_retry()
 async def parse_image_layout(
-        apikey: str, image_path: str, zip_path: str = None, output_name: str = None
-) -> tuple[list, str]:
+        apikey: str, image_path: str, output_path: str = None, 
+    ) -> tuple[list, str]:
     """Parse image layout
 
     Args:
         apikey (str): The API key
         image_path (str): Path to the image file
-        zip_path (str, optional): Path to save the zip file containing images. Defaults to image_name + 'picture.zip'.
-        output_name (str): output file name. Defaults to None.
+        output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
+
     Raises:
         FileError: If file size exceeds limit or file cannot be opened
         RateLimit: If rate limit is reached
@@ -453,31 +465,20 @@ async def parse_image_layout(
             - list: List of page dictionaries with page dimensions and md content
             - str: The unique identifier (uid) of the request
     """
+
     # Use the image name as the prefix for the zip file name
-    default_zip_filename = os.path.splitext(os.path.basename(image_path))[0]
-    print(f"default zip name{default_zip_filename}")
-    if output_name is not None:
-        default_zip_filename = output_name
-    new_zip_filename = default_zip_filename
-    # Use zip_path + image name + picture.zip to name zip files
-    if zip_path is None:
-        parent_directory = os.path.dirname(image_path)
-        if not parent_directory:
-            parent_directory = "."
-        zip_path = os.path.join(parent_directory, new_zip_filename)
-    else:
-        zip_path = os.path.join(zip_path, new_zip_filename)
+    output_zip_filename = os.path.splitext(os.path.basename(image_path))[0]
+    zip_path = os.path.join(output_path, output_zip_filename + '_images.zip')
 
-    if not os.path.exists(zip_path):
-        os.makedirs(os.path.dirname(zip_path), exist_ok=True)
+    counter = 1
+    while os.path.exists(zip_path):
+        zip_path = os.path.join(output_path, output_zip_filename + f'_images_{counter}.zip')
+        counter += 1
 
-    # Check zip_path is a file path and not exists
-    base_name, extension = os.path.splitext(zip_path)
-    random_digits = ''.join(random.choices(string.digits, k=10))
-    zip_path = f"{base_name}-{random_digits}{extension}"
-        # raise FileError("zip_path already exists! Please check the path")
-    if not zip_path.endswith(".zip"):
-        raise FileError("zip_path must end with .zip")
+
+    if not os.path.exists(output_path):
+        os.makedirs(output_path, exist_ok=True)
+
     # Check file size
     if os.path.getsize(image_path) > 7 * 1024 * 1024:  # 7MB
         raise FileError("Image file size exceeds 7MB limit")
@@ -510,13 +511,19 @@ async def parse_image_layout(
     data = response.json()
     await image_code_check(data.get("code", ""), trace_id=trace_id)
 
+
+    output_zip_path = ''
+
+
     # Save zip file if path provided and zip content exists
     if zip_path and data.get("data", {}).get("convert_zip"):
         zip_content = base64.b64decode(data["data"]["convert_zip"])
         with open(zip_path, "wb") as f:
             f.write(zip_content)
+        output_zip_path = zip_path
 
     return (
         data.get("data", {}).get("result", {}).get("pages", []),
         data.get("data", {}).get("uid", "Failed to get uid"),
+        output_zip_path
     )
