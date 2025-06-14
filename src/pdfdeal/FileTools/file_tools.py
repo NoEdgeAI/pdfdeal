@@ -474,7 +474,6 @@ def save_md(
 
     except Exception as e:
         logging.error(f"Error occurs when saving to {final_md_path}: {str(e)}")
-
         fail_reason = str(e) if str(e) else type(e).__name__
         return '', fail_reason
 

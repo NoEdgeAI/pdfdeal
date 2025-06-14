@@ -86,7 +86,8 @@ class ImageProcessor:
             self, 
             image_path: str, 
             process_type: str = "layout", 
-            output_path: str = 'Output'
+            output_path: str = 'Output',
+            save_subdir: bool = False,
         ) -> tuple[list, str, bool]:
         """Process an image with layout analysis
 
@@ -110,6 +111,10 @@ class ImageProcessor:
 
         if process_type not in ["layout"]:
             raise ValueError("process_type must be one of: 'layout'")
+
+        if save_subdir:
+            subdir_name = os.path.basename(image_path).split('.')[0]
+            output_path = os.path.join(output_path, subdir_name)
 
         try:
             logger.info(f"Starting {process_type} processing for {image_path}")
@@ -141,8 +146,9 @@ class ImageProcessor:
         image_paths: List[str],
         output_format: str = 'text',
         process_type: str = "layout",
-        concurrent_limit: int = 5,
         output_path: str = 'Output/',
+        save_subdir: bool = False,
+        concurrent_limit: int = 5,
     ) -> tuple[List[list], Dict[str, bool]]:
         """Process multiple images concurrently with rate limiting
 
@@ -151,6 +157,7 @@ class ImageProcessor:
             process_type (str): Type of processing, can be 'layout'
             output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
             output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
+            save_subdir (bool): Save the output to a subfolder under output_path. Defaults to False.
             concurrent_limit (int): Maximum number of concurrent processing tasks
 
         Returns:
@@ -166,12 +173,10 @@ class ImageProcessor:
             ) -> tuple[int, str, tuple[list, str, bool]]:
             async with semaphore:
                 logger.debug(f"Processing image {index + 1}/{len(image_paths)}: {path}")
-
-                output_result, uid, is_success, fail_reasons = await self.process_image(path, process_type, output_path)
-
+                output_result, uid, is_success, fail_reasons = await self.process_image(path, process_type, output_path, save_subdir)
                 async def save_result_as_md(
-                    image_path: str,
-                    result
+                        image_path: str,
+                        result
                     ):
 
                         all_results = []
@@ -180,7 +185,6 @@ class ImageProcessor:
                         basename, ext = os.path.basename(image_path).split('.')
 
                         output_formats = []
-
 
                         if isinstance(output_format, str):
                             if "," in output_format:
@@ -205,7 +209,7 @@ class ImageProcessor:
                                         output_path=output_path,
                                         output_name=f'{basename}_dollar.md',
                                         content=new_result[0]['md'],
-                                        save_subdir=False,
+                                        save_subdir=save_subdir,
                                     )
                                 elif fmt == 'md':
                                     new_result = copy.deepcopy(result)
@@ -213,7 +217,7 @@ class ImageProcessor:
                                         output_path=output_path,
                                         output_name=f'{basename}.md',
                                         content=new_result[0]['md'],
-                                        save_subdir=False,
+                                        save_subdir=save_subdir,
                                     )
                             elif fmt in ['text']:
                                 output_result = result
@@ -225,17 +229,19 @@ class ImageProcessor:
                         
                         return all_results, all_errors
                         
-
-                # TODO 需要细致处理
+                # 处理阶段失败的图片
                 if not is_success:
                     results = []
                     fail_reasons = fail_reasons
-                if is_success: 
+                else: 
                     results, save_fail_reasons = await save_result_as_md(image_path=path, result=output_result)
-
                     if all(x != '' for x in save_fail_reasons):
-                        fail_reasons = save_fail_reason
+                        fail_reasons = save_fail_reasons
                         is_success = False
+                    else:
+                        is_success = True
+                        fail_reasons = save_fail_reasons
+
 
                 return index, path, (results, fail_reasons, uid, is_success)
 
@@ -271,6 +277,7 @@ class ImageProcessor:
         process_type: str = "layout",
         output_format: str = 'text',
         output_path: str = "./Output",
+        save_subdir: bool = False,
         concurrent_limit: Optional[int] = None,
         ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Process image files with layout analysis
@@ -279,8 +286,10 @@ class ImageProcessor:
             pic_file (str | List[str]): Path to image file(s) or directory
             process_type (str): Type of processing, can be 'layout'
             output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
-            concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
             output_path (str): Path to save the result json and decoded base64 image zip .Defaults to Output.
+            save_subdir (bool): Save the output to a subfolder under output_path. Defaults to False.
+            concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
+
 
         Returns:
             Tuple containing:
@@ -302,6 +311,7 @@ class ImageProcessor:
             concurrent_limit=concurrent_limit or 5,
             output_path=output_path,
             output_format=output_format,
+            save_subdir=save_subdir,
         )
 
 
@@ -314,7 +324,7 @@ class ImageProcessor:
         for i, path in enumerate(pic_file):
             if not success_status.get(path, False):
                 failed_files.append({"error": failed_results[i], "path": path}) 
-                final_results.append("")
+                final_results.append([])
                 has_error = True
                 logger.error(f"Failed to process {path}, error: {failed_results[i]}")
             else:
@@ -339,6 +349,7 @@ class ImageProcessor:
             process_type: str = 'layout',
             output_format: str = 'text',
             output_path: str = 'Output',
+            save_subdir: bool = False,
             concurrent_limit: Optional[int] = None,
         ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Synchronous wrapper for pic2file_back
@@ -348,6 +359,7 @@ class ImageProcessor:
             process_type (str): Type of processing, can be 'layout'
             output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
             output_path (str): Path to save the result json and decoded base64 image zip .Defaults to Output.
+            save_subdir (bool): Save the output to a subfolder under output_path. Defaults to False.
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to None.
 
 
@@ -360,6 +372,7 @@ class ImageProcessor:
                 process_type=process_type,
                 output_format=output_format,
                 output_path=output_path,
+                save_subdir=save_subdir,
                 concurrent_limit=concurrent_limit,
             )
         )

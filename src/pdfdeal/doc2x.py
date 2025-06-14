@@ -348,6 +348,7 @@ class Doc2X:
             pic_file,
             output_format: str = "text",
             output_path: str = "./Output",
+            save_subdir: bool = False,
             concurrent_limit: Optional[int] = 5,
         ) -> tuple[List[Union[list, str]], List[dict], bool]:
         """Process image files with layout analysis
@@ -356,6 +357,7 @@ class Doc2X:
             pic_file (str | List[str]): Path to image files (jpg/png)
             output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
             output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
+            save_subdir (bool): Save the output to a subfolder under output_path. Defaults to False.
             concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to 5.
 
         Returns:
@@ -365,14 +367,18 @@ class Doc2X:
                 - Boolean indicating if any errors occurred
         """
 
-        if not os.path.isdir(output_path):
-            raise ValueError("output_path must be a directory")
+        if os.path.exists(output_path):
+            if not os.path.isdir(output_path):
+                raise ValueError("output_path must be a directory")
+        else:
+            os.makedirs(output_path, exist_ok=True)
 
         return self.image_processor.pic2file(
             pic_file=pic_file,
             process_type="layout",
             output_format=output_format,
             output_path=output_path,
+            save_subdir=save_subdir,
             concurrent_limit=concurrent_limit,
         )
 
@@ -699,7 +705,6 @@ class Doc2X:
             merge_cross_page_forms: bool = False,
             ocr: bool = False,
             save_subdir: bool = False,
-            
         ) -> Tuple[List[str], List[dict], bool]:
         """Convert PDF file to specified format
         Args:
@@ -711,7 +716,7 @@ class Doc2X:
             oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
             merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
             ocr (bool, optional): This option is deprecated and will not be used.
-            save_subdir(bool, optional): Save the output to a subfolder under output_path. Defaults to False.
+            save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
             export_history(str, optional): Export history file. Defaults to None.
         Returns:
             Tuple[List[str], List[dict], bool]: A tuple containing:

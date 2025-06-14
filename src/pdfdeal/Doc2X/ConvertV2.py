@@ -377,7 +377,7 @@ async def download_file(
         file_type (str): The type of file being downloaded (e.g., 'zip', 'docx').
         target_folder (str): The folder where the file should be saved.
         target_filename (str): The desired filename for the downloaded file, can include subdirectories.
-        save_subdir(bool, optional): Save the output to a subfolder under output_path. Defaults to False.
+        save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
 
     Raises:
         Exception: If there's an error creating the target folder or downloading the file.
@@ -514,12 +514,12 @@ async def parse_image_layout(
 
     output_zip_path = ''
 
+
     # Save zip file if path provided and zip content exists
     if zip_path and data.get("data", {}).get("convert_zip"):
         zip_content = base64.b64decode(data["data"]["convert_zip"])
         with open(zip_path, "wb") as f:
             f.write(zip_content)
-
         output_zip_path = zip_path
 
     return (
