@@ -15,7 +15,12 @@ from .Doc2X.ConvertV2 import (
     get_convert_result,
     download_file,
 )
-from .Doc2X.Types import OutputFormat
+from .Doc2X.Types import (
+    OutputFormat,
+    V2ParseModel,
+    V2ParseModelType,
+    normalize_v2_parse_model,
+)
 from .Doc2X.Pages import get_pdf_page_count
 from .Doc2X.Exception import RequestError, RateLimit, run_async
 from .FileTools.file_tools import get_files, save_json
@@ -139,6 +144,7 @@ async def parse_pdf(
         max_time: int,
         convert: bool,
         oss_choose: str = "auto",
+        model: V2ParseModelType = None,
         export_history: str = "",
 ) -> Tuple[str, List[str], List[dict]]:
     """Parse PDF file and return uid and extracted text"""
@@ -163,7 +169,7 @@ async def parse_pdf(
     for attempt in range(maxretry):
         try:
             logger.info(f"Uploading {pdf_path}...")
-            uid = await upload_pdf(apikey, pdf_path, oss_choose)
+            uid = await upload_pdf(apikey, pdf_path, oss_choose, model=model)
             if export_history != "":
                 await record_export_history(
                     csv_path=export_history,
@@ -390,6 +396,7 @@ class Doc2X:
             output_format: str = "md_dollar",
             convert: bool = False,
             oss_choose: str = "auto",
+            model: V2ParseModelType = None,
             merge_cross_page_forms: bool = False,
             save_subdir: bool = False,
             export_history: str = "",
@@ -433,6 +440,24 @@ class Doc2X:
             fmt = OutputFormat(fmt)
             if isinstance(fmt, OutputFormat):
                 fmt = fmt.value
+
+        try:
+            normalized_model = normalize_v2_parse_model(model)
+            model_enum = V2ParseModel(normalized_model) if normalized_model else None
+            if model_enum == V2ParseModel.V3_2026:
+                model_version = "v3"
+                model_label = normalized_model
+            else:
+                model_version = "v2"
+                model_label = "default(v2)"
+        except Exception:
+            normalized_model = str(model).strip() if model is not None else ""
+            model_version = "custom"
+            model_label = normalized_model or "default(v2)"
+
+        logger.info(
+            f"Doc2X parse model selected: {model_version} ({model_label})"
+        )
 
         # Track total pages and last request time
         total_pages = 0
@@ -498,6 +523,7 @@ class Doc2X:
                         max_time=self.max_time,
                         convert=convert,
                         oss_choose=oss_choose,
+                        model=model,
                         export_history=export_history,
                     )
                     parse_results[index] = (uid, texts, locations)
@@ -702,6 +728,7 @@ class Doc2X:
             output_format: str = "md_dollar",
             convert: bool = False,
             oss_choose: str = "always",
+            model: V2ParseModelType = None,
             merge_cross_page_forms: bool = False,
             ocr: bool = False,
             save_subdir: bool = False,
@@ -714,6 +741,7 @@ class Doc2X:
             output_format (str, optional): The output format. Defaults to "md_dollar".
             convert (bool, optional): Convert "[" and "[[" to "$" and "$$". Defaults to False.
             oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
+            model (V2ParseModelType, optional): Upload model for v2 preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
             merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
             ocr (bool, optional): This option is deprecated and will not be used.
             save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
@@ -744,6 +772,7 @@ class Doc2X:
                 output_format=output_format,
                 convert=convert,
                 oss_choose=oss_choose,
+                model=model,
                 merge_cross_page_forms=merge_cross_page_forms,
                 save_subdir=save_subdir,
                 export_history=export_history,

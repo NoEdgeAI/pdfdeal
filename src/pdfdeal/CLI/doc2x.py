@@ -1,6 +1,7 @@
 import argparse
 import os
 from pdfdeal import Doc2X
+from pdfdeal.Doc2X.Types import V2ParseModel
 
 
 def main():
@@ -29,6 +30,12 @@ def main():
         "--max_pages",
         help="The maximum number of pages to process at same time, default is 1000, DO NOT set if you don't know",
         required=False,
+    )
+    parser.add_argument(
+        "--model",
+        help='Upload model for v2 preupload API, e.g. "v3-2026". Leave empty to use server default v2.',
+        required=False,
+        choices=[model.value for model in V2ParseModel],
     )
     parser.add_argument(
         "-o",
@@ -99,6 +106,7 @@ def main():
         pdf_file=filename,
         output_path=output,
         output_format=format,
+        model=args.model,
     )
 
     for file in success:

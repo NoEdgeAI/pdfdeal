@@ -104,6 +104,7 @@ success, failed, flag = client.pdf2file(
     pdf_file="tests/pdf",
     output_path="./Output",
     output_format="docx",
+    model="v3-2026",  # optional, default is server-side v2
 )
 print(success)
 print(failed)

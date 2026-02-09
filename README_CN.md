@@ -102,6 +102,7 @@ success, failed, flag = client.pdf2file(
     pdf_file="tests/pdf",
     output_path="./Output",
     output_format="docx",
+    model="v3-2026",  # 可选，不填则使用服务端默认 v2
 )
 print(success)
 print(failed)

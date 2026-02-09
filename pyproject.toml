@@ -10,7 +10,12 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["httpx[http2]>=0.23.1, <1", "pypdf"]
+dependencies = [
+    "aiofiles>=24.1.0",
+    "httpx[http2]>=0.23.1, <1",
+    "pypdf",
+    "pytest>=8.3.5",
+]
 
 [project.optional-dependencies]
 tools = ["emoji", "Pillow", "reportlab", "beautifulsoup4"]

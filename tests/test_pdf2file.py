@@ -1,6 +1,61 @@
 from pdfdeal import Doc2X
+from pdfdeal.Doc2X.Types import V2ParseModel
 import os
 import pytest
+
+
+def _require_apikey() -> str:
+    apikey = os.getenv("DOC2X_APIKEY")
+    if not apikey:
+        pytest.skip("DOC2X_APIKEY is required for integration tests")
+    return apikey
+
+
+def test_pdf2file_v3_model_example():
+    client = Doc2X(apikey=_require_apikey(), debug=True, thread=1)
+    success, failed, flag = client.pdf2file(
+        pdf_file="tests/pdf/sample.pdf",
+        output_format="text",
+        model=V2ParseModel.V3_2026,
+    )
+
+    print(success)
+    print(failed)
+    print(flag)
+    assert flag is False
+    assert isinstance(success[0], str)
+    assert success[0] != ""
+    assert failed[0]["error"] == ""
+
+
+def test_pdf2file_mixed_v3_and_v2_models():
+    client = Doc2X(apikey=_require_apikey(), debug=True, thread=1)
+
+    success_v3, failed_v3, flag_v3 = client.pdf2file(
+        pdf_file="tests/pdf/sample.pdf",
+        output_format="text",
+        model=V2ParseModel.V3_2026,
+    )
+    success_v2, failed_v2, flag_v2 = client.pdf2file(
+        pdf_file="tests/pdf/sample.pdf",
+        output_format="text",
+    )
+
+    print(success_v3)
+    print(failed_v3)
+    print(flag_v3)
+    print(success_v2)
+    print(failed_v2)
+    print(flag_v2)
+    assert flag_v3 is False
+    assert flag_v2 is False
+    assert isinstance(success_v3[0], str)
+    assert isinstance(success_v2[0], str)
+    assert success_v3[0] != ""
+    assert success_v2[0] != ""
+    assert failed_v3[0]["error"] == ""
+    assert failed_v2[0]["error"] == ""
+
 
 # 测试一个文件,output_format为json
 def test_pdf2json():

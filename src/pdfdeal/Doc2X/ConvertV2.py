@@ -9,7 +9,7 @@ import re
 from typing import Tuple
 from .Exception import RateLimit, FileError, RequestError, async_retry, code_check
 import logging
-from .Types import OutputFormat
+from .Types import OutputFormat, V2ParseModelType, normalize_v2_parse_model
 import base64
 
 Base_URL = "https://v2.doc2x.noedgeai.com/api"
@@ -35,13 +35,19 @@ IMAGE_ERROR_SOLUTIONS = {
 
 
 @async_retry(timeout=200)
-async def upload_pdf(apikey: str, pdffile: str, oss_choose: str = "always") -> str:
+async def upload_pdf(
+        apikey: str,
+        pdffile: str,
+        oss_choose: str = "always",
+        model: V2ParseModelType = None,
+) -> str:
     """Upload pdf file to server and return the uid of the file
 
     Args:
         apikey (str): The key
         pdffile (str): The pdf file path
         oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
+        model (V2ParseModelType, optional): Upload model for preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
 
     Raises:
         FileError: Input file size is too large
@@ -56,7 +62,7 @@ async def upload_pdf(apikey: str, pdffile: str, oss_choose: str = "always") -> s
     if oss_choose == "always" or (
             oss_choose == "auto" and os.path.getsize(pdffile) >= 100 * 1024 * 1024
     ):
-        return await upload_pdf_big(apikey, pdffile)
+        return await upload_pdf_big(apikey, pdffile, model=model)
     elif oss_choose == "none" and os.path.getsize(pdffile) >= 100 * 1024 * 1024:
         logger.warning("Now not support PDF file > 300MB!")
         raise RequestError("parse_file_too_large")
@@ -96,12 +102,17 @@ async def upload_pdf(apikey: str, pdffile: str, oss_choose: str = "always") -> s
     )
 
 
-async def upload_pdf_big(apikey: str, pdffile: str) -> str:
+async def upload_pdf_big(
+        apikey: str,
+        pdffile: str,
+        model: V2ParseModelType = None,
+) -> str:
     """Upload big pdf file to server and return the uid of the file
 
     Args:
         apikey (str): The key
         pdffile (str): The pdf file path
+        model (V2ParseModelType, optional): Upload model for preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
 
     Raises:
         FileError: Input file size is too large
@@ -122,12 +133,16 @@ async def upload_pdf_big(apikey: str, pdffile: str) -> str:
 
     url = f"{Base_URL}/v2/parse/preupload"
     filename = os.path.basename(pdffile)
+    upload_payload = {"file_name": filename}
+    model_value = normalize_v2_parse_model(model)
+    if model_value:
+        upload_payload["model"] = model_value
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(15), http2=True) as client:
         post_res = await client.post(
             url,
             headers={"Authorization": f"Bearer {apikey}"},
-            json={"file_name": filename},
+            json=upload_payload,
         )
     trace_id = post_res.headers.get("trace-id")
     if post_res.status_code == 200:
@@ -405,7 +420,7 @@ async def download_file(
 
 
     filename = f'{filename}_{zip_file_suffix}'
-    
+
     file_path = os.path.join(target_dir, f"{filename}.{file_type}")
     counter = 1
     while os.path.exists(file_path):
@@ -445,7 +460,7 @@ async def image_code_check(code: str, trace_id: str = None):
 
 @async_retry()
 async def parse_image_layout(
-        apikey: str, image_path: str, output_path: str = None, 
+        apikey: str, image_path: str, output_path: str = None,
     ) -> tuple[list, str]:
     """Parse image layout
 
