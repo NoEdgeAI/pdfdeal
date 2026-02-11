@@ -41,7 +41,9 @@ def main():
         "--formula_level",
         help=(
             'Formula degradation level for v2 export body. '
-            '0=keep formulas, 1=inline formulas to text, 2=all formulas to text. '
+            '0 (default, recommended)=keep original formulas; '
+            '1=degrade inline formulas (\\(...\\), $...$); '
+            '2=degrade all formulas including block formulas (\\[...\\], $$...$$). '
             'Only effective when --model is "v3-2026".'
         ),
         required=False,

@@ -755,8 +755,11 @@ class Doc2X:
             model (V2ParseModelType, optional): Upload model for v2 preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
             merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
             formula_level (FormulaLevelType, optional): Formula degradation level for export body.
-                0=keep formulas, 1=inline formulas to text, 2=all formulas to text.
-                Defaults to 0. This option only takes effect when upload model is "v3-2026".
+                0 (default, recommended): Keep original formulas.
+                1: Degrade inline formulas to plain text (\\(...\\), $...$).
+                2: Degrade all formulas to plain text, including inline and block formulas
+                   (\\(...\\), $...$, \\[...\\], $$...$$).
+                This option only takes effect when upload model is "v3-2026".
             ocr (bool, optional): This option is deprecated and will not be used.
             save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
             export_history(str, optional): Export history file. Defaults to None.

@@ -103,7 +103,7 @@ success, failed, flag = client.pdf2file(
     output_path="./Output",
     output_format="docx",
     model="v3-2026",  # 可选，不填则使用服务端默认 v2
-    formula_level=1,  # 可选：0=保留公式，1=仅行内公式退化为文本，2=全部公式退化为文本；仅在 model="v3-2026" 时生效
+    formula_level=1,  # 可选：0（默认，推荐）不降级；1 仅降级行内公式（\(...\)、$...$）；2 降级所有公式（含 \[...\]、$$...$$）
 )
 print(success)
 print(failed)

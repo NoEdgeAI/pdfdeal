@@ -88,9 +88,10 @@ V2ParseModelType = Optional[Union[str, V2ParseModel]]
 class FormulaLevel(int, Enum):
     """Formula degradation levels for v2 export body.
 
-    0: Keep formulas as Markdown (no degradation).
-    1: Convert inline formulas to plain text.
-    2: Convert all formulas to plain text.
+    0 (default, recommended): Keep original formulas (no degradation).
+    1: Degrade inline formulas to plain text (\\(...\\), $...$).
+    2: Degrade all formulas to plain text, including inline and block formulas
+       (\\(...\\), $...$, \\[...\\], $$...$$).
     """
 
     KEEP_MARKDOWN = 0
@@ -139,7 +140,8 @@ def normalize_formula_level(formula_level: FormulaLevelType) -> int:
     if isinstance(formula_level, bool):
         raise ValueError(
             "formula_level must be one of 0, 1, 2 "
-            "(0=keep formulas, 1=inline formulas to text, 2=all formulas to text)"
+            "(0=keep original formulas [default/recommended], "
+            "1=degrade inline formulas, 2=degrade all formulas)"
         )
 
     try:
@@ -147,7 +149,8 @@ def normalize_formula_level(formula_level: FormulaLevelType) -> int:
     except (TypeError, ValueError):
         raise ValueError(
             "formula_level must be one of 0, 1, 2 "
-            "(0=keep formulas, 1=inline formulas to text, 2=all formulas to text)"
+            "(0=keep original formulas [default/recommended], "
+            "1=degrade inline formulas, 2=degrade all formulas)"
         )
 
     return level.value

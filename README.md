@@ -105,7 +105,7 @@ success, failed, flag = client.pdf2file(
     output_path="./Output",
     output_format="docx",
     model="v3-2026",  # optional, default is server-side v2
-    formula_level=1,  # optional: 0=keep, 1=inline->text, 2=all->text; only effective with model="v3-2026"
+    formula_level=1,  # optional: 0(default/recommended)=keep formulas; 1=inline formulas -> text; 2=all formulas (inline+block) -> text
 )
 print(success)
 print(failed)

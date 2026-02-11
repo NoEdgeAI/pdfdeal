@@ -18,7 +18,7 @@ from .Types import (
 )
 import base64
 
-Base_URL = "https://v2.doc2x.noedgeai.com/api"
+Base_URL = "https://v2.dev.doc2x.noedgeai.com/api"
 
 logger = logging.getLogger("pdfdeal.convertV2")
 
@@ -288,8 +288,11 @@ async def convert_parse(
         filename (str, optional): Output filename for md/tex (without extension). Defaults to None.
         merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
         formula_level (FormulaLevelType, optional): Formula degradation level for export body.
-            0=keep formulas, 1=inline formulas to text, 2=all formulas to text.
-            Defaults to 0. This option only takes effect when upload model is "v3-2026".
+            0 (default, recommended): Keep original formulas.
+            1: Degrade inline formulas to plain text (\\(...\\), $...$).
+            2: Degrade all formulas to plain text, including inline and block formulas
+               (\\(...\\), $...$, \\[...\\], $$...$$).
+            This option only takes effect when upload model is "v3-2026".
 
     Raises:
         ValueError: If 'to' is not a valid format
