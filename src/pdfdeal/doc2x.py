@@ -16,9 +16,11 @@ from .Doc2X.ConvertV2 import (
     download_file,
 )
 from .Doc2X.Types import (
+    FormulaLevelType,
     OutputFormat,
     V2ParseModel,
     V2ParseModelType,
+    normalize_formula_level,
     normalize_v2_parse_model,
 )
 from .Doc2X.Pages import get_pdf_page_count
@@ -238,12 +240,17 @@ async def convert_to_format(
         output_name: str,
         max_time: int,
         merge_cross_page_forms: bool = False,
+        formula_level: FormulaLevelType = 0,
         save_subdir: bool = False,
     ) -> str:
     """Convert parsed PDF to specified format"""
     logger.info(f"Converting {uid} to {output_format}...")
     status, url = await convert_parse(
-        apikey, uid, output_format, merge_cross_page_forms=merge_cross_page_forms
+        apikey,
+        uid,
+        output_format,
+        merge_cross_page_forms=merge_cross_page_forms,
+        formula_level=formula_level,
     )
 
     for _ in range(max_time // 3):
@@ -398,6 +405,7 @@ class Doc2X:
             oss_choose: str = "auto",
             model: V2ParseModelType = None,
             merge_cross_page_forms: bool = False,
+            formula_level: FormulaLevelType = 0,
             save_subdir: bool = False,
             export_history: str = "",
         ) -> Tuple[List[str], List[dict], bool]:
@@ -440,6 +448,7 @@ class Doc2X:
             fmt = OutputFormat(fmt)
             if isinstance(fmt, OutputFormat):
                 fmt = fmt.value
+        formula_level = normalize_formula_level(formula_level)
 
         try:
             normalized_model = normalize_v2_parse_model(model)
@@ -581,6 +590,7 @@ class Doc2X:
                             output_name=name_fmt,
                             max_time=self.max_time,
                             merge_cross_page_forms=merge_cross_page_forms,
+                            formula_level=formula_level,
                             save_subdir=save_subdir
                         )
                         if export_history != "":
@@ -730,6 +740,7 @@ class Doc2X:
             oss_choose: str = "always",
             model: V2ParseModelType = None,
             merge_cross_page_forms: bool = False,
+            formula_level: FormulaLevelType = 0,
             ocr: bool = False,
             save_subdir: bool = False,
         ) -> Tuple[List[str], List[dict], bool]:
@@ -743,6 +754,9 @@ class Doc2X:
             oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
             model (V2ParseModelType, optional): Upload model for v2 preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
             merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
+            formula_level (FormulaLevelType, optional): Formula degradation level for export body.
+                0=keep formulas, 1=inline formulas to text, 2=all formulas to text.
+                Defaults to 0. This option only takes effect when upload model is "v3-2026".
             ocr (bool, optional): This option is deprecated and will not be used.
             save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
             export_history(str, optional): Export history file. Defaults to None.
@@ -774,6 +788,7 @@ class Doc2X:
                 oss_choose=oss_choose,
                 model=model,
                 merge_cross_page_forms=merge_cross_page_forms,
+                formula_level=formula_level,
                 save_subdir=save_subdir,
                 export_history=export_history,
             )

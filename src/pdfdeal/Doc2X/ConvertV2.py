@@ -9,7 +9,13 @@ import re
 from typing import Tuple
 from .Exception import RateLimit, FileError, RequestError, async_retry, code_check
 import logging
-from .Types import OutputFormat, V2ParseModelType, normalize_v2_parse_model
+from .Types import (
+    FormulaLevelType,
+    OutputFormat,
+    V2ParseModelType,
+    normalize_formula_level,
+    normalize_v2_parse_model,
+)
 import base64
 
 Base_URL = "https://v2.doc2x.noedgeai.com/api"
@@ -271,6 +277,7 @@ async def convert_parse(
         to: str,
         filename: str = None,
         merge_cross_page_forms: bool = False,
+        formula_level: FormulaLevelType = 0,
 ) -> Tuple[str, str]:
     """Convert parsed file to specified format
 
@@ -280,6 +287,9 @@ async def convert_parse(
         to (str): Export format, supports: md|tex|docx|md_dollar
         filename (str, optional): Output filename for md/tex (without extension). Defaults to None.
         merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
+        formula_level (FormulaLevelType, optional): Formula degradation level for export body.
+            0=keep formulas, 1=inline formulas to text, 2=all formulas to text.
+            Defaults to 0. This option only takes effect when upload model is "v3-2026".
 
     Raises:
         ValueError: If 'to' is not a valid format
@@ -295,10 +305,12 @@ async def convert_parse(
     if isinstance(to, OutputFormat):
         to = to.value
 
+    formula_level = normalize_formula_level(formula_level)
     payload = {
         "uid": uid,
         "to": to,
         "formula_mode": "normal",
+        "formula_level": formula_level,
         "merge_cross_page_forms": merge_cross_page_forms,
     }
     if filename and to in ["md", "md_dollar", "tex"]:

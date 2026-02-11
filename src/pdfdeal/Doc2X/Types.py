@@ -85,6 +85,39 @@ class V2ParseModel(str, Enum):
 V2ParseModelType = Optional[Union[str, V2ParseModel]]
 
 
+class FormulaLevel(int, Enum):
+    """Formula degradation levels for v2 export body.
+
+    0: Keep formulas as Markdown (no degradation).
+    1: Convert inline formulas to plain text.
+    2: Convert all formulas to plain text.
+    """
+
+    KEEP_MARKDOWN = 0
+    INLINE_TO_TEXT = 1
+    ALL_TO_TEXT = 2
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+            try:
+                value = int(value)
+            except ValueError:
+                pass
+        for member in cls:
+            if member.value == value:
+                return member
+        raise ValueError(
+            f"{value} is not a valid {cls.__name__}, must be one of {', '.join([str(m.value) for m in cls])}"
+        )
+
+
+FormulaLevelType = Optional[Union[int, str, FormulaLevel]]
+
+
 def normalize_v2_parse_model(model: V2ParseModelType) -> str:
     if model is None:
         return ""
@@ -96,3 +129,25 @@ def normalize_v2_parse_model(model: V2ParseModelType) -> str:
         return ""
 
     return V2ParseModel(model).value
+
+
+def normalize_formula_level(formula_level: FormulaLevelType) -> int:
+    if formula_level is None:
+        return FormulaLevel.KEEP_MARKDOWN.value
+    if isinstance(formula_level, FormulaLevel):
+        return formula_level.value
+    if isinstance(formula_level, bool):
+        raise ValueError(
+            "formula_level must be one of 0, 1, 2 "
+            "(0=keep formulas, 1=inline formulas to text, 2=all formulas to text)"
+        )
+
+    try:
+        level = FormulaLevel(formula_level)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "formula_level must be one of 0, 1, 2 "
+            "(0=keep formulas, 1=inline formulas to text, 2=all formulas to text)"
+        )
+
+    return level.value
