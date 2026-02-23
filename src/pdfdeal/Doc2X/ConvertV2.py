@@ -18,7 +18,7 @@ from .Types import (
 )
 import base64
 
-Base_URL = "https://v2.dev.doc2x.noedgeai.com/api"
+Base_URL = "https://v2.doc2x.noedgeai.com/api"
 
 logger = logging.getLogger("pdfdeal.convertV2")
 
