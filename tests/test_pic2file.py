@@ -1,62 +1,98 @@
-import time
 from pdfdeal import Doc2X
-from pdfdeal.file_tools import get_files
-import logging
+import os
+import pytest
+from typing import Optional
 
-httpx_logger = logging.getLogger("httpx")
-httpx_logger.setLevel(logging.WARNING)
-logging.basicConfig(level=logging.INFO)
+
+def _require_apikey() -> str:
+    apikey = os.getenv("DOC2X_APIKEY")
+    if not apikey:
+        pytest.skip("DOC2X_APIKEY is required for integration tests")
+    return apikey
+
+
+def _build_client(apikey: Optional[str] = None) -> Doc2X:
+    return Doc2X(apikey=apikey or _require_apikey(), debug=True, thread=1)
+
 
 def test_single_pic2file():
-    client = Doc2X()
-    results, errors, has_error = client.piclayout(
+    client = _build_client()
+    success, failed, flag = client.piclayout(
         pic_file="tests/image/sample.png",
-        zip_path="./Output/test/single/",
+        output_path="./Output/test/single/pic2file",
     )
-    print(results)
-    print(errors)
-    print(has_error)
-    assert not has_error
-    assert isinstance(results, list)  # 返回值应该是列表类型
-    assert len(errors) == 1
-    assert isinstance(errors[0], dict)
-    assert "error" in errors[0]
-    assert "path" in errors[0]
+    print(success)
+    print(failed)
+    print(flag)
+    assert flag is False
+    assert isinstance(success, list)
+    assert len(success) == 1
+    assert isinstance(success[0], list)
+    assert len(success[0]) == 1
+    assert isinstance(success[0][0], list)
+    assert len(success[0][0]) > 0
+    assert isinstance(success[0][0][0], dict)
+    assert "md" in success[0][0][0]
+    assert "zip_path" in success[0][0][0]
+    assert "path" in success[0][0][0]
+    assert failed[0]["error"] == ""
+
 
 def test_multiple_pic2file():
-    client = Doc2X()
-    results, errors, has_error = client.piclayout(
+    client = _build_client()
+    success, failed, flag = client.piclayout(
         pic_file="tests/image",
-        zip_path="./Output/test/multiple/",
+        output_path="./Output/test/multiple/pic2file",
     )
-    assert isinstance(results, list)  # 返回值应该是列表类型
-    assert len(errors) == 3
-    assert isinstance(errors[0], dict)
-    assert "error" in errors[0]
-    assert "path" in errors[0]
+    print(success)
+    print(failed)
+    print(flag)
+    assert flag
+    assert isinstance(success, list)
+    assert len(success) == 3
+    assert len(failed) == 3
+    for idx, result in enumerate(success):
+        if not result:
+            assert failed[idx]["error"] != ""
+            assert failed[idx]["path"] != ""
+        else:
+            assert failed[idx]["error"] == ""
 
 
 def test_multiple_high_rpm():
-    client = Doc2X()
-    file_list = ["tests/image/sample.png" for _ in range(30)] #测试处理上限是否为30s/30 req
-    results, errors, has_error = client.piclayout(
+    client = _build_client()
+    file_list = ["tests/image/sample.png" for _ in range(30)]
+    success, failed, flag = client.piclayout(
         pic_file=file_list,
-        zip_path="./Output/test/highrpm/",
+        output_path="./Output/test/highrpm/pic2file",
     )
-    assert not has_error
-    assert isinstance(results, list)  # 返回值应该是列表类型
-    assert len(results) == 30
-    assert isinstance(errors[0], dict)
-    assert "error" in errors[0]
-    assert "path" in errors[0]
+    print(success)
+    print(failed)
+    print(flag)
+    assert flag is False
+    assert isinstance(success, list)
+    assert len(success) == 30
+    assert all(isinstance(item, list) and item for item in success)
+    assert all(item["error"] == "" for item in failed)
 
 
 def test_piclayout():
-    client = Doc2X()
-    # Test single file layout analysis
-    results, errors, has_error = client.piclayout("tests/image/sample.png")
-    assert not has_error
-    assert isinstance(results, list)  # 返回值应该是列表类型
-    assert isinstance(errors[0], dict)
-    assert "error" in errors[0]
-    assert "path" in errors[0]
+    client = _build_client()
+    success, failed, flag = client.piclayout(
+        pic_file="tests/image/sample.png",
+    )
+    print(success)
+    print(failed)
+    print(flag)
+    assert flag is False
+    assert isinstance(success, list)
+    assert len(success) == 1
+    assert isinstance(success[0], list)
+    assert len(success[0]) == 1
+    assert isinstance(success[0][0], list)
+    assert len(success[0][0]) > 0
+    assert isinstance(success[0][0][0], dict)
+    assert "md" in success[0][0][0]
+    assert "zip_path" in success[0][0][0]
+    assert "path" in success[0][0][0]
+    assert failed[0]["error"] == ""
