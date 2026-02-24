@@ -1,7 +1,8 @@
 from pdfdeal import Doc2X
-from pdfdeal.Doc2X.Types import V2ParseModel
+from pdfdeal.Doc2X.Types import FormulaLevel, V2ParseModel
 import os
 import pytest
+from typing import Optional
 
 
 def _require_apikey() -> str:
@@ -11,8 +12,20 @@ def _require_apikey() -> str:
     return apikey
 
 
+def _build_client(apikey: Optional[str] = None) -> Doc2X:
+    return Doc2X(apikey=apikey or _require_apikey(), debug=True, thread=1)
+
+
+def _skip_if_doc2x_internal_error(flag, failed):
+    if not flag or not failed:
+        return
+    first_error = failed[0].get("error", "") if isinstance(failed[0], dict) else ""
+    if "internal_error" in first_error:
+        pytest.skip(f"Doc2X service internal_error: {first_error}")
+
+
 def test_pdf2file_v3_model_example():
-    client = Doc2X(apikey=_require_apikey(), debug=True, thread=1)
+    client = _build_client()
     success, failed, flag = client.pdf2file(
         pdf_file="tests/pdf/sample.pdf",
         output_format="text",
@@ -29,7 +42,7 @@ def test_pdf2file_v3_model_example():
 
 
 def test_pdf2file_mixed_v3_and_v2_models():
-    client = Doc2X(apikey=_require_apikey(), debug=True, thread=1)
+    client = _build_client()
 
     success_v3, failed_v3, flag_v3 = client.pdf2file(
         pdf_file="tests/pdf/sample.pdf",
@@ -57,9 +70,64 @@ def test_pdf2file_mixed_v3_and_v2_models():
     assert failed_v2[0]["error"] == ""
 
 
+def test_pdf2file_v3_model_formula_level_enum_example():
+    client = _build_client()
+    output_path = "./Output/test/single/formula_level_enum"
+    success, failed, flag = client.pdf2file(
+        pdf_file="tests/pdf/sample.pdf",
+        output_path=output_path,
+        output_format="md",
+        model=V2ParseModel.V3_2026,
+        formula_level=FormulaLevel.INLINE_TO_TEXT,
+    )
+
+    print(success)
+    print(failed)
+    print(flag)
+    _skip_if_doc2x_internal_error(flag, failed)
+    assert flag is False
+    assert isinstance(success[0], str)
+    assert success[0] != ""
+    assert os.path.isfile(success[0])
+    assert failed[0]["error"] == ""
+
+
+def test_pdf2file_v3_model_formula_level_all_to_text_example():
+    client = _build_client()
+    output_path = "./Output/test/single/formula_level_all_to_text"
+    success, failed, flag = client.pdf2file(
+        pdf_file="tests/pdf/sample.pdf",
+        output_path=output_path,
+        output_format="md",
+        model=V2ParseModel.V3_2026,
+        formula_level=FormulaLevel.ALL_TO_TEXT,
+    )
+
+    print(success)
+    print(failed)
+    print(flag)
+    _skip_if_doc2x_internal_error(flag, failed)
+    assert flag is False
+    assert isinstance(success[0], str)
+    assert success[0] != ""
+    assert os.path.isfile(success[0])
+    assert failed[0]["error"] == ""
+
+
+def test_pdf2file_invalid_formula_level():
+    client = _build_client(apikey="test_apikey")
+    with pytest.raises(ValueError, match="formula_level must be one of 0, 1, 2"):
+        client.pdf2file(
+            pdf_file="tests/pdf/sample.pdf",
+            output_path="./Output/test/single/pdf2file",
+            output_format="md",
+            formula_level=3,
+        )
+
+
 # 测试一个文件,output_format为json
 def test_pdf2json():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     output_path = "./Output/test/single/pdf2file"
     filepath, failed, flag = client.pdf2file(
         pdf_file="tests/pdf",
@@ -74,7 +142,7 @@ def test_pdf2json():
 
 # 测试一个文件,output_format为md_dollar,tex,docx
 def test_single_pdf2file():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     output_path = "./Output/test/single/pdf2file"
     filepath, failed, flag = client.pdf2file(
         pdf_file="tests/pdf/sample.pdf",
@@ -92,7 +160,7 @@ def test_single_pdf2file():
 
 # 测试一个文件,output_format为md_dollar,tex,docx，同时保存到子文件夹下
 def test_single_pdf2file_with_subdir():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     output_path = "./Output/test/single/pdf2file"
     filepath, failed, flag = client.pdf2file(
         pdf_file="tests/pdf/sample.pdf",
@@ -110,7 +178,7 @@ def test_single_pdf2file_with_subdir():
 
 # 测试非法的输出格式
 def test_error_input_pdf2file():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     with pytest.raises(ValueError):
         client.pdf2file(
             pdf_file="tests/pdf/sample.pdf",
@@ -121,7 +189,7 @@ def test_error_input_pdf2file():
 
 # 测试一个文件夹下的多个文件，output_format
 def test_multiple_pdf2file():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     output_path, failed, flag = client.pdf2file(
         pdf_file="tests/pdf",
         output_path="./Output/test/multiple/pdf2file",
@@ -143,7 +211,7 @@ def test_multiple_pdf2file():
 
 # 测试一个文件夹下的多个pdf文件转化（包含其子文件夹下的pdf文件）
 def test_multiple_pdf2file_with_subdir():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     output_path, failed, flag = client.pdf2file(
         pdf_file="tests/pdf",
         output_path="./Output/test/multiple/pdf2file",
@@ -165,7 +233,7 @@ def test_multiple_pdf2file_with_subdir():
 
 # 测试格式错误或者损坏的pdf文件
 def test_all_fail_pdf2file():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     output_path, failed, flag = client.pdf2file(
         pdf_file="tests/pdf/sample_bad.pdf",
         output_path="./Output/test/allfail/pdf2file",
@@ -178,7 +246,7 @@ def test_all_fail_pdf2file():
 
 
 def test_export_history():
-    client = Doc2X(debug=True, thread=1)
+    client = _build_client()
     output_path, failed, flag = client.pdf2file(
         pdf_file="tests/pdf",
         output_path="./Output/",
