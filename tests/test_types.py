@@ -1,6 +1,11 @@
 import pytest
 
-from pdfdeal.Doc2X.Types import FormulaLevel, normalize_formula_level
+from pdfdeal.Doc2X.Types import (
+    FormulaLevel,
+    V2ParseModel,
+    normalize_formula_level,
+    normalize_v2_parse_model,
+)
 
 
 @pytest.mark.parametrize(
@@ -26,3 +31,26 @@ def test_normalize_formula_level_valid(value, expected):
 def test_normalize_formula_level_invalid(value):
     with pytest.raises(ValueError, match="formula_level must be one of 0, 1, 2"):
         normalize_formula_level(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, ""),
+        ("", ""),
+        ("  ", ""),
+        ("v2", ""),
+        ("V2", ""),
+        (V2ParseModel.V2, ""),
+        ("v3-2026", "v3-2026"),
+        ("V3-2026", "v3-2026"),
+        (V2ParseModel.V3_2026, "v3-2026"),
+    ],
+)
+def test_normalize_v2_parse_model_valid(value, expected):
+    assert normalize_v2_parse_model(value) == expected
+
+
+def test_normalize_v2_parse_model_invalid():
+    with pytest.raises(ValueError, match="is not a valid V2ParseModel"):
+        normalize_v2_parse_model("v3")

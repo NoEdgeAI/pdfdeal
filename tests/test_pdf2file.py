@@ -24,6 +24,50 @@ def _skip_if_doc2x_internal_error(flag, failed):
         pytest.skip(f"Doc2X service internal_error: {first_error}")
 
 
+def _skip_if_transient_integration_error(flag, failed):
+    if not flag or not failed:
+        return
+    error_texts = []
+    for item in failed:
+        if isinstance(item, dict):
+            error_texts.append(str(item.get("error", "")))
+        else:
+            error_texts.append(str(item))
+    combined = " | ".join(error_texts).lower()
+    transient_markers = (
+        "internal_error",
+        "connecterror",
+        "all connection attempts failed",
+        "name or service not known",
+        "nodename nor servname provided",
+        "temporary failure in name resolution",
+        "timed out",
+    )
+    if any(marker in combined for marker in transient_markers):
+        pytest.skip(f"Transient integration error: {combined}")
+
+
+def _count_pdf_files(path: str) -> int:
+    return sum(
+        1
+        for root, _, files in os.walk(path)
+        for file in files
+        if file.lower().endswith(".pdf")
+    )
+
+
+def _assert_multiple_pdf2file_result(output_path, failed, expected_count: int) -> None:
+    assert len(output_path) == expected_count
+    assert len(failed) == expected_count
+    for file_path, fail in zip(output_path, failed):
+        if isinstance(file_path, str):
+            if file_path == "":
+                assert fail["error"] != ""
+            else:
+                assert os.path.isfile(file_path)
+                assert fail["error"] == ""
+
+
 def test_pdf2file_v3_model_example():
     client = _build_client()
     success, failed, flag = client.pdf2file(
@@ -74,7 +118,7 @@ def test_pdf2file_v3_model_formula_level_enum_example():
     client = _build_client()
     output_path = "./Output/test/single/formula_level_enum"
     success, failed, flag = client.pdf2file(
-        pdf_file="tests/pdf/sample.pdf",
+        pdf_file="tests/pdf/formula_level.pdf",
         output_path=output_path,
         output_format="md",
         model=V2ParseModel.V3_2026,
@@ -96,7 +140,7 @@ def test_pdf2file_v3_model_formula_level_all_to_text_example():
     client = _build_client()
     output_path = "./Output/test/single/formula_level_all_to_text"
     success, failed, flag = client.pdf2file(
-        pdf_file="tests/pdf/sample.pdf",
+        pdf_file="tests/pdf/formula_level.pdf",
         output_path=output_path,
         output_format="md",
         model=V2ParseModel.V3_2026,
@@ -118,7 +162,7 @@ def test_pdf2file_invalid_formula_level():
     client = _build_client(apikey="test_apikey")
     with pytest.raises(ValueError, match="formula_level must be one of 0, 1, 2"):
         client.pdf2file(
-            pdf_file="tests/pdf/sample.pdf",
+            pdf_file="tests/pdf/formula_level.pdf",
             output_path="./Output/test/single/pdf2file",
             output_format="md",
             formula_level=3,
@@ -153,6 +197,7 @@ def test_single_pdf2file():
     print(filepath)
     print(failed)
     print(flag)
+    _skip_if_transient_integration_error(flag, failed)
     assert flag == False
     assert os.path.dirname(filepath[0][0]) == output_path
     assert os.path.dirname(filepath[0][1]) == output_path
@@ -171,6 +216,7 @@ def test_single_pdf2file_with_subdir():
     print(filepath)
     print(failed)
     print(flag)
+    _skip_if_transient_integration_error(flag, failed)
     assert flag == False
     assert os.path.dirname(filepath[0][0]) == os.path.join(output_path, "sample")
     assert os.path.dirname(filepath[0][1]) == os.path.join(output_path, "sample")
@@ -187,49 +233,21 @@ def test_error_input_pdf2file():
             output_format="md_dallar",
         )
 
-# 测试一个文件夹下的多个文件，output_format
-def test_multiple_pdf2file():
+@pytest.mark.parametrize("save_subdir", [False, True], ids=["flat", "with_subdir"])
+def test_multiple_pdf2file(save_subdir: bool):
     client = _build_client()
+    expected_count = _count_pdf_files("tests/pdf")
     output_path, failed, flag = client.pdf2file(
         pdf_file="tests/pdf",
         output_path="./Output/test/multiple/pdf2file",
         output_format="docx",
-        save_subdir=False,
+        save_subdir=save_subdir,
     )
     print(output_path)
     print(failed)
     print(flag)
     assert flag
-    assert len(output_path) == 3
-    for idx, file_path in enumerate(output_path):
-        if isinstance(file_path, str):
-            if file_path == '':
-               assert failed[idx]['error'] != ""
-            else:
-                assert os.path.isfile(file_path)
-                assert failed[idx]['error'] == ""
-
-# 测试一个文件夹下的多个pdf文件转化（包含其子文件夹下的pdf文件）
-def test_multiple_pdf2file_with_subdir():
-    client = _build_client()
-    output_path, failed, flag = client.pdf2file(
-        pdf_file="tests/pdf",
-        output_path="./Output/test/multiple/pdf2file",
-        output_format="docx",
-        save_subdir=True,
-    )
-    print(output_path)
-    print(failed)
-    print(flag)
-    assert flag
-    assert len(output_path) == 3
-    for idx, file_path in enumerate(output_path):
-        if isinstance(file_path, str):
-            if file_path == '':
-                assert failed[idx]['error'] != ""
-            else:
-                assert os.path.isfile(file_path)
-                assert failed[idx]['error'] == ""
+    _assert_multiple_pdf2file_result(output_path, failed, expected_count)
 
 # 测试格式错误或者损坏的pdf文件
 def test_all_fail_pdf2file():

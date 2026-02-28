@@ -70,6 +70,7 @@ class Support_File_Type(str, Enum):
 
 
 class V2ParseModel(str, Enum):
+    V2 = "v2"
     V3_2026 = "v3-2026"
 
     @classmethod
@@ -123,13 +124,14 @@ def normalize_v2_parse_model(model: V2ParseModelType) -> str:
     if model is None:
         return ""
     if isinstance(model, V2ParseModel):
-        return model.value
+        return "" if model == V2ParseModel.V2 else model.value
 
     model = model.strip()
     if not model:
         return ""
 
-    return V2ParseModel(model).value
+    model_enum = V2ParseModel(model)
+    return "" if model_enum == V2ParseModel.V2 else model_enum.value
 
 
 def normalize_formula_level(formula_level: FormulaLevelType) -> int:
