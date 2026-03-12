@@ -5,6 +5,8 @@ node_modules
 my-docs
 Output
 self_use.py
+.history/
+tmp/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
