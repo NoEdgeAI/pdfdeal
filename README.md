@@ -191,4 +191,25 @@ python scripts/extract_v3_tables.py \
   --output-dir ./Output/tables
 ```
 
+You can also import the helpers directly:
+
+```python
+from pdfdeal import extract_v3_figure_images, extract_v3_table_images
+
+figure_summary = extract_v3_figure_images(
+    pdf_path="/path/to/input.pdf",
+    v3_json_path="/path/to/input_v3.json",
+    dpi=200,
+    output_dir="./Output/figures",
+)
+table_summary = extract_v3_table_images(
+    pdf_path="/path/to/input.pdf",
+    v3_json_path="/path/to/input_v3.json",
+    dpi=200,
+    output_dir="./Output/tables",
+)
+print(figure_summary["crop_count"], figure_summary["manifest_path"])
+print(table_summary["crop_count"], table_summary["manifest_path"])
+```
+
 See the online documentation for details.
