@@ -6,7 +6,7 @@ import httpx
 import json
 import os
 import re
-from typing import Tuple
+from typing import Any, Tuple
 from .Exception import RateLimit, FileError, RequestError, async_retry, code_check
 import logging
 from .Types import (
@@ -52,7 +52,10 @@ async def upload_pdf(
     Args:
         apikey (str): The key
         pdffile (str): The pdf file path
-        oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
+        oss_choose (str, optional): Upload preference. The deprecated direct-upload
+            path is no longer used. "always" and "auto" both use the preupload API.
+            "never"/"none" is rejected because it would require the deprecated direct
+            upload endpoint. Defaults to "always".
         model (V2ParseModelType, optional): Upload model for preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
 
     Raises:
@@ -64,48 +67,18 @@ async def upload_pdf(
     Returns:
         str: The uid of the file
     """
-    url = f"{Base_URL}/v2/parse/pdf"
-    if oss_choose == "always" or (
-            oss_choose == "auto" and os.path.getsize(pdffile) >= 100 * 1024 * 1024
-    ):
-        return await upload_pdf_big(apikey, pdffile, model=model)
-    elif oss_choose == "none" and os.path.getsize(pdffile) >= 100 * 1024 * 1024:
-        logger.warning("Now not support PDF file > 300MB!")
-        raise RequestError("parse_file_too_large")
-    try:
-        with open(pdffile, "rb") as f:
-            file = f.read()
-    except Exception as e:
-        raise FileError(f"Open file error! {e}")
-
-    async with httpx.AsyncClient(timeout=httpx.Timeout(120), http2=True) as client:
-        post_res = await client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {apikey}",
-                "Content-Type": "application/pdf",
-            },
-            content=file,
+    oss_mode = oss_choose.strip().lower()
+    if oss_mode in {"never", "none"}:
+        raise ValueError(
+            "oss_choose='never'/'none' is no longer supported because the direct "
+            "upload endpoint has been deprecated. Use 'always' or 'auto' instead."
         )
-    trace_id = post_res.headers.get("trace-id", "Failed to get trace-id ")
-    if post_res.status_code == 200:
-        response_data = json.loads(post_res.content.decode("utf-8"))
-        uid = response_data.get("data", {}).get("uid")
-
-        await code_check(
-            code=response_data.get("code", response_data), uid=uid, trace_id=trace_id
+    if oss_mode not in {"always", "auto"}:
+        raise ValueError(
+            "oss_choose must be one of 'always', 'auto', 'never', 'none'"
         )
-        return uid
 
-    if post_res.status_code == 429:
-        raise RateLimit(trace_id=trace_id)
-    if post_res.status_code == 400:
-        raise RequestError(error_code=post_res.text, trace_id=trace_id)
-    elif post_res.status_code == 401:
-        raise ValueError("API key is unauthorized. (认证失败，请检测API key是否正确)")
-    raise Exception(
-        f"Upload file error,trace_id{trace_id}:{post_res.status_code}:{post_res.text}"
-    )
+    return await upload_pdf_big(apikey, pdffile, model=model)
 
 
 async def upload_pdf_big(
@@ -218,7 +191,7 @@ async def uid_status(
         apikey: str,
         uid: str,
         convert: bool = False,
-) -> Tuple[int, str, list, list]:
+) -> Tuple[int, str, list, list, Any]:
     """Get the status of the file
 
     Args:
@@ -231,7 +204,8 @@ async def uid_status(
         Exception: Get status error
 
     Returns:
-        Tuple[int, str, list, list]: The progress, status, texts and locations
+        Tuple[int, str, list, list, Any]: The progress, status, texts, locations,
+            and raw parse result.
     """
     url = f"{Base_URL}/v2/parse/status?uid={uid}"
     async with httpx.AsyncClient(timeout=httpx.Timeout(30), http2=True) as client:
@@ -255,10 +229,10 @@ async def uid_status(
 
     progress, status = data["data"].get("progress", 0), data["data"].get("status", "")
     if status == "processing":
-        return progress, "Processing file", [], []
+        return progress, "Processing file", [], [], None
     elif status == "success":
         texts, locations = await decode_data(data["data"], convert)
-        return 100, "Success", texts, locations
+        return 100, "Success", texts, locations, data["data"].get("result")
     elif status == "failed":
         raise RequestError(
             f"Failed to deal with file uid {uid}! Trace-id:{trace_id}:{response_data.text}"
@@ -267,7 +241,7 @@ async def uid_status(
         logger.warning(
             f"Unknown status: {status} in uid {uid} file! Trace-id:{trace_id}:{response_data.text}"
         )
-        return progress, status, [], []
+        return progress, status, [], [], None
 
 
 @async_retry()

@@ -127,4 +127,65 @@ print(failed)
 print(flag)
 ```
 
-更多详细请参见在线文档。
+### V3 JSON 更新
+
+当 `model="v3-2026"` 时：
+
+- `output_format="json"` 现在会保存 Doc2X 原始 v3 JSON（`result.pages...`），不再保存旧的简化 `[{text, location}]` 结构。
+- 即使 `output_format` 不包含 `json`（例如 `text`、`detailed`、`md`、`docx`），也会额外保存一份 sidecar `.json`。
+- 如果 `output_format` 包含 `json`，sidecar JSON 的命名会跟随 `output_names` 里 `json` 这一槽位。
+- 如果 `output_format` 不包含 `json`，sidecar JSON 的命名会跟随 `output_names` 里第一个非空名字。
+- 如果没有传 `output_names`，sidecar JSON 会回退到原 PDF 文件名。
+- 已不再使用过期的小文件直传。`oss_choose="always"` 和 `oss_choose="auto"` 都会走 preupload；`oss_choose="never"` / `oss_choose="none"` 会直接报错。
+
+示例：
+
+```python
+from pdfdeal import Doc2X
+
+client = Doc2X(apikey="Your API key", debug=True)
+success, failed, flag = client.pdf2file(
+    pdf_file="tests/pdf/sample.pdf",
+    output_path="./Output/test/v3",
+    output_format="text,json",
+    output_names=[["plain.txt", "viz.data"]],
+    model="v3-2026",
+)
+print(success)  # ["页面文本...", "./Output/test/v3/viz.json"]
+print(failed)
+print(flag)
+```
+
+### V3 figure/table 裁剪辅助脚本
+
+在 [`scripts/`](/Users/cc/work/NoEdgeAI/pdfdeal/scripts) 下新增了两个辅助脚本：
+
+- [`extract_v3_figures.py`](/Users/cc/work/NoEdgeAI/pdfdeal/scripts/extract_v3_figures.py)：基于 Doc2X v3 JSON 从 PDF 中裁剪 figure 图片
+- [`extract_v3_tables.py`](/Users/cc/work/NoEdgeAI/pdfdeal/scripts/extract_v3_tables.py)：基于 Doc2X v3 JSON 从 PDF 中裁剪 table 图片
+
+这两个脚本都会：
+
+- 先校验 v3 JSON 是否符合裁剪规则
+- 用 `fitz` 按指定 `dpi` 只渲染包含目标 block 的页面
+- 将整页 PNG 保存到 `_pages/`
+- 根据 v3 JSON 中的 block `bbox/xyxy` 和 page 坐标裁剪出目标区域
+- 输出带裁剪元数据的 `manifest.json`
+
+示例：
+
+```bash
+python scripts/extract_v3_figures.py \
+  --pdf /path/to/input.pdf \
+  --v3-json /path/to/input_v3.json \
+  --dpi 200 \
+  --output-dir ./Output/figures
+```
+
+```bash
+python scripts/extract_v3_tables.py \
+  --pdf /path/to/input.pdf \
+  --v3-json /path/to/input_v3.json \
+  --dpi 200 \
+  --output-dir ./Output/tables
+```
+

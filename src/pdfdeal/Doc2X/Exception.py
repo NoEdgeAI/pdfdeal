@@ -54,7 +54,7 @@ class RequestError(Exception):
     SOLUTIONS = {
         "parse_quota_limit": "当前可用的页数不足，请检查余额或联系负责人 (Insufficient parsing quota, check balance or contact support)",
         "parse_create_task_error": "短暂等待后重试, 如果还出现报错则请联系负责人 (Retry after a short wait, contact support if error persists)",
-        "parse_file_too_large": "当前允许单个文件大小 <= 300MB(直接上传) | <= 1GB(通过OSS上传), 请拆分 pdf (File size must be <= 300MB (direct upload) | <= 1GB (OSS upload), please split the PDF)",
+        "parse_file_too_large": "当前允许单个文件大小 <= 1GB(通过 preupload 上传), 请拆分 pdf (File size must be <= 1GB via preupload upload, please split the PDF)",
         "parse_file_page_limit": "当前允许单个文件页数 <= 1000页, 请拆分 pdf (File page count must be <= 1000 pages, please split the PDF)",
         "parse_file_lock": "为了防止反复解析, 暂时锁定一天,考虑PDF可能有兼容性问题, 重新打印后再尝试。仍然失败请反馈request_id给负责人 (Locked for a day to prevent repeated parsing. Consider reprinting the PDF if compatibility issues persist. Report request_id if it still fails)",
         "parse_pdf_invalid": "不是有效的PDF文件,考虑PDF可能有兼容性问题, 重新打印后再尝试。仍然失败请反馈request_id给负责人 (File is not a valid PDF. Consider reprinting the PDF if compatibility issues persist. Report request_id if it still fails)",

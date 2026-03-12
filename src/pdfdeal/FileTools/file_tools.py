@@ -407,14 +407,14 @@ def auto_split_mds(
 def save_json(
     output_path: str,
     output_name: str,
-    json_content: list[dict] = None,
+    json_content=None,
     save_subdir: bool = False,
 ):
     """Save the JSON file
     Args:
         output_path (str): The path to save the JSON file
         output_name(str):  JSON file name
-        json_content (list[dict]): The JSON content to save
+        json_content: The JSON content to save
     """
     if json_content is None:
         json_content = []
@@ -478,5 +478,4 @@ def save_md(
         return '', fail_reason
 
     return final_md_path, ''
-
 

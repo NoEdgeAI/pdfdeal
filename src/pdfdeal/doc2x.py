@@ -148,7 +148,7 @@ async def parse_pdf(
         oss_choose: str = "auto",
         model: V2ParseModelType = None,
         export_history: str = "",
-) -> Tuple[str, List[str], List[dict]]:
+) -> Tuple[str, List[str], List[dict], Any]:
     """Parse PDF file and return uid and extracted text"""
 
     async def task_limit_lock():
@@ -186,7 +186,7 @@ async def parse_pdf(
 
             for _ in range(max_time // 3):
                 try:
-                    progress, status, texts, locations = await uid_status(
+                    progress, status, texts, locations, raw_result = await uid_status(
                         apikey, uid, convert
                     )
                     if status == "Success":
@@ -197,7 +197,7 @@ async def parse_pdf(
                                 uid=uid,
                                 status="Success",
                                 lock=asyncio.Lock())
-                        return uid, texts, locations
+                        return uid, texts, locations, raw_result
                     elif status == "Processing file":
                         logger.info(f"Processing {uid} : {progress}%")
                         await asyncio.sleep(3)
@@ -275,14 +275,14 @@ async def convert_to_format(
 async def save_json_format(
         output_path: str,
         output_name: str,
-        json_content: list[dict] = None,
+        json_content: Any = None,
         save_subdir: bool = False,
     ):
     """Save the JSON file
     Args:
     output_path (str): The path to save the JSON file
     output_name(str): JSON file name
-    json_content (list[dict]): The JSON content to save
+    json_content (Any): The JSON content to save
     """
     loop = asyncio.get_running_loop()
     saved_path = await loop.run_in_executor(
@@ -524,7 +524,7 @@ class Doc2X:
 
                 # Process the file
                 try:
-                    uid, texts, locations = await parse_pdf(
+                    uid, texts, locations, raw_result = await parse_pdf(
                         apikey=self.apikey,
                         pdf_path=pdf,
                         maxretry=self.retry_time,
@@ -535,7 +535,7 @@ class Doc2X:
                         model=model,
                         export_history=export_history,
                     )
-                    parse_results[index] = (uid, texts, locations)
+                    parse_results[index] = (uid, texts, locations, raw_result)
                     # Create convert task as soon as parse is complete
                     task = asyncio.create_task(convert_file(index, name))
                     convert_tasks.add(task)
@@ -555,9 +555,48 @@ class Doc2X:
         async def convert_file(index, name):
             if parse_results[index] is None:
                 return
-            uid, texts, locations = parse_results[index]
+            uid, texts, locations, raw_result = parse_results[index]
             all_results = []
             all_errors = []
+            json_output_reason = "single output name"
+            if isinstance(name, list):
+                json_output_name = None
+                if "json" in output_formats:
+                    json_format_index = output_formats.index("json")
+                    if json_format_index < len(name):
+                        json_output_name = name[json_format_index]
+                        json_output_reason = (
+                            f'using output_names[{json_format_index}] because '
+                            f'output_format includes "json"'
+                        )
+                if not json_output_name:
+                    json_output_name = next((item for item in name if item), None)
+                    json_output_reason = (
+                        "using the first non-empty output_names entry because "
+                        'output_format does not include "json"'
+                    )
+            else:
+                json_output_name = name
+            json_output_name = json_output_name or os.path.basename(pdf_file[index])
+            v3_json_result_path = None
+            if model_enum == V2ParseModel.V3_2026 and raw_result is not None:
+                v3_json_result_path = await save_json_format(
+                    output_path=os.path.join(
+                        output_path, os.path.dirname(json_output_name)
+                    ),
+                    output_name=os.path.basename(json_output_name),
+                    json_content=raw_result,
+                    save_subdir=save_subdir,
+                )
+                if isinstance(name, list) and len(name) > 1:
+                    logger.info(
+                        "V3 sidecar JSON naming for %s: %s. Requested output_names=%s. "
+                        "Saved to %s",
+                        pdf_file[index],
+                        json_output_reason,
+                        name,
+                        v3_json_result_path,
+                    )
 
             for name_index, fmt in enumerate(output_formats):
                 if isinstance(name, list):
@@ -568,6 +607,7 @@ class Doc2X:
                 else:
                     name_fmt = name
                 try:
+                    output_name = name_fmt or os.path.basename(pdf_file[index])
                     if fmt in ["md", "md_dollar", "tex", "docx"]:
                         nonlocal last_request_time
                         # Wait for request interval
@@ -619,14 +659,21 @@ class Doc2X:
                             ]
 
                         elif fmt == "json":
-                            json_content = [
-                                {"text": text, "location": loc}
-                                for text, loc in zip(texts, locations)
-                            ]
-                            result = await save_json_format(output_path=os.path.join(output_path, os.path.dirname(name_fmt)),
-                                                            output_name=os.path.basename(name_fmt),
-                                                            json_content=json_content,
-                                                            save_subdir=save_subdir)
+                            if v3_json_result_path is not None:
+                                result = v3_json_result_path
+                            else:
+                                json_content = [
+                                    {"text": text, "location": loc}
+                                    for text, loc in zip(texts, locations)
+                                ]
+                                result = await save_json_format(
+                                    output_path=os.path.join(
+                                        output_path, os.path.dirname(output_name)
+                                    ),
+                                    output_name=os.path.basename(output_name),
+                                    json_content=json_content,
+                                    save_subdir=save_subdir,
+                                )
 
 
                         if export_history != "":
@@ -751,7 +798,10 @@ class Doc2X:
             output_path (str, optional): The output path. Defaults to "./Output".
             output_format (str, optional): The output format. Defaults to "md_dollar".
             convert (bool, optional): Convert "[" and "[[" to "$" and "$$". Defaults to False.
-            oss_choose (str, optional): OSS upload preference. "always" for always using OSS, "auto" for using OSS only when the file size exceeds 100MB, "never" for never using OSS. Defaults to "always".
+            oss_choose (str, optional): Upload preference. The deprecated direct-upload
+                path is no longer used. "always" and "auto" both use preupload.
+                "never"/"none" is rejected because it would require the deprecated
+                direct-upload endpoint. Defaults to "always".
             model (V2ParseModelType, optional): Upload model for v2 preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
             merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
             formula_level (FormulaLevelType, optional): Formula degradation level for export body.

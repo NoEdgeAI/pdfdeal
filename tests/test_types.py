@@ -1,3 +1,6 @@
+import asyncio
+import importlib
+
 import pytest
 
 from pdfdeal.Doc2X.Types import (
@@ -6,6 +9,8 @@ from pdfdeal.Doc2X.Types import (
     normalize_formula_level,
     normalize_v2_parse_model,
 )
+
+convert_v2 = importlib.import_module("pdfdeal.Doc2X.ConvertV2")
 
 
 @pytest.mark.parametrize(
@@ -54,3 +59,34 @@ def test_normalize_v2_parse_model_valid(value, expected):
 def test_normalize_v2_parse_model_invalid():
     with pytest.raises(ValueError, match="is not a valid V2ParseModel"):
         normalize_v2_parse_model("v3")
+
+
+def test_upload_pdf_rejects_deprecated_direct_upload_mode():
+    with pytest.raises(ValueError, match="direct upload endpoint has been deprecated"):
+        asyncio.run(
+            convert_v2.upload_pdf(
+                "test_apikey", "tests/pdf/sample.pdf", oss_choose="never"
+            )
+        )
+
+
+def test_upload_pdf_auto_still_uses_preupload(monkeypatch):
+    calls = []
+
+    async def fake_upload_pdf_big(apikey, pdffile, model=None):
+        calls.append((apikey, pdffile, model))
+        return "uid_123"
+
+    monkeypatch.setattr(convert_v2, "upload_pdf_big", fake_upload_pdf_big)
+
+    uid = asyncio.run(
+        convert_v2.upload_pdf(
+            "test_apikey",
+            "tests/pdf/sample.pdf",
+            oss_choose="auto",
+            model=V2ParseModel.V3_2026,
+        )
+    )
+
+    assert uid == "uid_123"
+    assert calls == [("test_apikey", "tests/pdf/sample.pdf", V2ParseModel.V3_2026)]

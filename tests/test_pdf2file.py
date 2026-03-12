@@ -1,8 +1,12 @@
+import asyncio
+import json
+import os
+from typing import Optional
+
+import pytest
+
 from pdfdeal import Doc2X
 from pdfdeal.Doc2X.Types import FormulaLevel, V2ParseModel
-import os
-import pytest
-from typing import Optional
 
 
 def _require_apikey() -> str:
@@ -183,6 +187,225 @@ def test_pdf2json():
     print(failed)
     print(flag)
     assert flag
+
+
+def test_pdf2json_without_output_names_uses_pdf_basename(monkeypatch, tmp_path):
+    client = _build_client(apikey="test_apikey")
+
+    async def fake_parse_pdf(**kwargs):
+        pdf_path = kwargs["pdf_path"]
+        return "uid", [f"text for {os.path.basename(pdf_path)}"], [{
+            "url": "",
+            "page_idx": 0,
+            "page_width": 100,
+            "page_height": 200,
+        }], {"pages": [{"md": f"text for {os.path.basename(pdf_path)}"}]}
+
+    monkeypatch.setattr("pdfdeal.doc2x.parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr("pdfdeal.doc2x.get_pdf_page_count", lambda _: 1)
+
+    success, failed, flag = asyncio.run(
+        client.pdf2file_back(
+            pdf_file=["tests/pdf/sample.pdf", "tests/pdf/sample_bad.pdf"],
+            output_path=str(tmp_path),
+            output_format="json",
+        )
+    )
+
+    assert flag is False
+    assert [os.path.basename(path) for path in success] == [
+        "sample.json",
+        "sample_bad.json",
+    ]
+    assert all(os.path.isfile(path) for path in success)
+    assert all(item["error"] == "" for item in failed)
+
+
+def test_pdf2json_v3_model_saves_raw_v3_json(monkeypatch, tmp_path):
+    client = _build_client(apikey="test_apikey")
+    raw_result = {
+        "pages": [
+            {
+                "page_idx": 0,
+                "md": "page markdown",
+                "layout": {
+                    "blocks": [
+                        {"id": "blk_0", "type": "Text", "text": "page markdown"}
+                    ]
+                },
+            }
+        ]
+    }
+
+    async def fake_parse_pdf(**kwargs):
+        return "uid", ["page markdown"], [{
+            "url": "",
+            "page_idx": 0,
+            "page_width": 100,
+            "page_height": 200,
+        }], raw_result
+
+    monkeypatch.setattr("pdfdeal.doc2x.parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr("pdfdeal.doc2x.get_pdf_page_count", lambda _: 1)
+
+    success, failed, flag = asyncio.run(
+        client.pdf2file_back(
+            pdf_file="tests/pdf/sample.pdf",
+            output_path=str(tmp_path),
+            output_format="json",
+            model=V2ParseModel.V3_2026,
+        )
+    )
+
+    assert flag is False
+    assert os.path.isfile(success[0])
+    with open(success[0], "r", encoding="utf-8") as f:
+        saved_json = json.load(f)
+    assert saved_json == raw_result
+    assert failed[0]["error"] == ""
+
+
+def test_pdf2text_v3_model_saves_raw_v3_json_sidecar(monkeypatch, tmp_path):
+    client = _build_client(apikey="test_apikey")
+    raw_result = {
+        "pages": [
+            {
+                "page_idx": 0,
+                "md": "page markdown",
+                "layout": {
+                    "blocks": [
+                        {"id": "blk_0", "type": "Text", "text": "page markdown"}
+                    ]
+                },
+            }
+        ]
+    }
+
+    async def fake_parse_pdf(**kwargs):
+        return "uid", ["page markdown"], [{
+            "url": "",
+            "page_idx": 0,
+            "page_width": 100,
+            "page_height": 200,
+        }], raw_result
+
+    monkeypatch.setattr("pdfdeal.doc2x.parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr("pdfdeal.doc2x.get_pdf_page_count", lambda _: 1)
+
+    success, failed, flag = asyncio.run(
+        client.pdf2file_back(
+            pdf_file="tests/pdf/sample.pdf",
+            output_path=str(tmp_path),
+            output_format="text",
+            model=V2ParseModel.V3_2026,
+        )
+    )
+
+    sidecar_path = os.path.join(str(tmp_path), "sample.json")
+
+    assert flag is False
+    assert success[0] == "page markdown"
+    assert os.path.isfile(sidecar_path)
+    with open(sidecar_path, "r", encoding="utf-8") as f:
+        saved_json = json.load(f)
+    assert saved_json == raw_result
+    assert failed[0]["error"] == ""
+
+
+def test_pdf2detailed_v3_model_saves_raw_v3_json_sidecar(monkeypatch, tmp_path):
+    client = _build_client(apikey="test_apikey")
+    raw_result = {
+        "pages": [
+            {
+                "page_idx": 0,
+                "md": "page markdown",
+                "layout": {
+                    "blocks": [
+                        {"id": "blk_0", "type": "Text", "text": "page markdown"}
+                    ]
+                },
+            }
+        ]
+    }
+
+    async def fake_parse_pdf(**kwargs):
+        return "uid", ["page markdown"], [{
+            "url": "",
+            "page_idx": 0,
+            "page_width": 100,
+            "page_height": 200,
+        }], raw_result
+
+    monkeypatch.setattr("pdfdeal.doc2x.parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr("pdfdeal.doc2x.get_pdf_page_count", lambda _: 1)
+
+    success, failed, flag = asyncio.run(
+        client.pdf2file_back(
+            pdf_file="tests/pdf/sample.pdf",
+            output_path=str(tmp_path),
+            output_format="detailed",
+            model=V2ParseModel.V3_2026,
+        )
+    )
+
+    sidecar_path = os.path.join(str(tmp_path), "sample.json")
+
+    assert flag is False
+    assert success[0] == [{
+        "text": "page markdown",
+        "location": {
+            "url": "",
+            "page_idx": 0,
+            "page_width": 100,
+            "page_height": 200,
+        },
+    }]
+    assert os.path.isfile(sidecar_path)
+    with open(sidecar_path, "r", encoding="utf-8") as f:
+        saved_json = json.load(f)
+    assert saved_json == raw_result
+    assert failed[0]["error"] == ""
+
+
+def test_pdf2file_v3_logs_sidecar_json_naming_rule(monkeypatch, tmp_path, capsys):
+    client = _build_client(apikey="test_apikey")
+    raw_result = {
+        "pages": [
+            {
+                "page_idx": 0,
+                "md": "page markdown",
+                "layout": {"blocks": [{"id": "blk_0", "type": "Text"}]},
+            }
+        ]
+    }
+
+    async def fake_parse_pdf(**kwargs):
+        return "uid", ["page markdown"], [{
+            "url": "",
+            "page_idx": 0,
+            "page_width": 100,
+            "page_height": 200,
+        }], raw_result
+
+    monkeypatch.setattr("pdfdeal.doc2x.parse_pdf", fake_parse_pdf)
+    monkeypatch.setattr("pdfdeal.doc2x.get_pdf_page_count", lambda _: 1)
+
+    success, failed, flag = asyncio.run(
+        client.pdf2file_back(
+            pdf_file="tests/pdf/sample.pdf",
+            output_names=[["plain.txt", "viz.data"]],
+            output_path=str(tmp_path),
+            output_format="text,json",
+            model=V2ParseModel.V3_2026,
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert flag is False
+    assert os.path.basename(success[0][1]) == "viz.json"
+    assert failed[0]["error"] == ["", ""]
+    assert "using output_names[1] because output_format includes \"json\"" in captured.err
+    assert "Saved to" in captured.err
 
 # 测试一个文件,output_format为md_dollar,tex,docx
 def test_single_pdf2file():
