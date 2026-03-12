@@ -1,19 +1,8 @@
-import importlib.util
 import json
 from pathlib import Path
 
 import fitz
-
-
-def _load_crop_utils_module():
-    module_path = (
-        Path(__file__).resolve().parents[1] / "scripts" / "v3_media_crop_utils.py"
-    )
-    spec = importlib.util.spec_from_file_location("v3_media_crop_utils", module_path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
-    return module
+from pdfdeal.v3_media import extract_v3_figure_images, extract_v3_table_images
 
 
 def _build_test_pdf(pdf_path: Path) -> None:
@@ -55,7 +44,6 @@ def _build_test_v3_json(json_path: Path) -> None:
 
 
 def test_extract_v3_figure_crops(tmp_path):
-    crop_utils = _load_crop_utils_module()
     pdf_path = tmp_path / "sample.pdf"
     json_path = tmp_path / "sample.json"
     output_dir = tmp_path / "figures"
@@ -63,12 +51,11 @@ def test_extract_v3_figure_crops(tmp_path):
     _build_test_pdf(pdf_path)
     _build_test_v3_json(json_path)
 
-    summary = crop_utils.extract_target_images(
+    summary = extract_v3_figure_images(
         pdf_path=str(pdf_path),
         v3_json_path=str(json_path),
         dpi=144,
         output_dir=str(output_dir),
-        target_kind="figure",
     )
 
     assert summary["crop_count"] == 1
@@ -80,7 +67,6 @@ def test_extract_v3_figure_crops(tmp_path):
 
 
 def test_extract_v3_table_crops(tmp_path):
-    crop_utils = _load_crop_utils_module()
     pdf_path = tmp_path / "sample.pdf"
     json_path = tmp_path / "sample.json"
     output_dir = tmp_path / "tables"
@@ -88,12 +74,11 @@ def test_extract_v3_table_crops(tmp_path):
     _build_test_pdf(pdf_path)
     _build_test_v3_json(json_path)
 
-    summary = crop_utils.extract_target_images(
+    summary = extract_v3_table_images(
         pdf_path=str(pdf_path),
         v3_json_path=str(json_path),
         dpi=144,
         output_dir=str(output_dir),
-        target_kind="table",
     )
 
     assert summary["crop_count"] == 1

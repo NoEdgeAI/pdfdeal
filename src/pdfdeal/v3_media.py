@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -6,7 +5,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 try:
     import fitz
@@ -186,7 +185,9 @@ def validate_v3_result(
                 if block_type != target_block_type:
                     continue
                 block_xyxy = _block_xyxy(block)
-                _validate_block_within_page(block_xyxy, page_xyxy, block_id or "<unknown>")
+                _validate_block_within_page(
+                    block_xyxy, page_xyxy, block_id or "<unknown>"
+                )
                 target_blocks.append(
                     {
                         "id": block_id or f"{target_block_type.lower()}_{page_idx}",
@@ -216,7 +217,9 @@ def _page_image_to_pil(page_pixmap: "fitz.Pixmap") -> Image.Image:
     mode = "RGB"
     if page_pixmap.alpha:
         mode = "RGBA"
-    return Image.frombytes(mode, [page_pixmap.width, page_pixmap.height], page_pixmap.samples)
+    return Image.frombytes(
+        mode, [page_pixmap.width, page_pixmap.height], page_pixmap.samples
+    )
 
 
 def _crop_box_in_pixels(
@@ -334,6 +337,36 @@ def extract_target_images(
     }
 
 
+def extract_v3_figure_images(
+    pdf_path: str,
+    v3_json_path: str,
+    dpi: int,
+    output_dir: str,
+) -> Dict[str, Any]:
+    return extract_target_images(
+        pdf_path=pdf_path,
+        v3_json_path=v3_json_path,
+        dpi=dpi,
+        output_dir=output_dir,
+        target_kind="figure",
+    )
+
+
+def extract_v3_table_images(
+    pdf_path: str,
+    v3_json_path: str,
+    dpi: int,
+    output_dir: str,
+) -> Dict[str, Any]:
+    return extract_target_images(
+        pdf_path=pdf_path,
+        v3_json_path=v3_json_path,
+        dpi=dpi,
+        output_dir=output_dir,
+        target_kind="table",
+    )
+
+
 def build_parser(target_kind: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -386,3 +419,14 @@ def run_cli(target_kind: str) -> int:
     print(f"Manifest: {summary['manifest_path']}")
     return 0
 
+
+__all__ = [
+    "V3ValidationError",
+    "load_v3_result",
+    "validate_v3_result",
+    "extract_target_images",
+    "extract_v3_figure_images",
+    "extract_v3_table_images",
+    "build_parser",
+    "run_cli",
+]
