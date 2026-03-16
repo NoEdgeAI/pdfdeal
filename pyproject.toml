@@ -12,16 +12,28 @@ classifiers = [
 ]
 dependencies = [
     "aiofiles>=24.1.0",
+    "cryptography>=46.0.5",
+    "h2>=4.3.0; python_version>='3.9'",
     "httpx[http2]>=0.23.1, <1",
-    "pypdf",
+    "pypdf>=6.8.0; python_version>='3.9'",
+    "pypdf>=5.0.0,<6.0.0; python_version<'3.9'",
     "pytest>=8.3.5",
+    "urllib3>=2.6.3; python_version>='3.9'",
+    "urllib3>=1.26.20,<2.0.0; python_version<'3.9'",
 ]
 
 [project.optional-dependencies]
-tools = ["emoji", "Pillow", "reportlab", "beautifulsoup4"]
+tools = [
+    "emoji",
+    "Pillow>=12.1.1; python_version>='3.10'",
+    "Pillow>=10.4.0,<12.0.0; python_version<'3.10'",
+    "reportlab",
+    "beautifulsoup4",
+]
 rag = [
     "emoji",
-    "Pillow",
+    "Pillow>=12.1.1; python_version>='3.10'",
+    "Pillow>=10.4.0,<12.0.0; python_version<'3.10'",
     "reportlab",
     "oss2",
     "boto3",
@@ -31,7 +43,8 @@ rag = [
 dev = [
     "pytest",
     "emoji",
-    "Pillow",
+    "Pillow>=12.1.1; python_version>='3.10'",
+    "Pillow>=10.4.0,<12.0.0; python_version<'3.10'",
     "reportlab",
     "oss2",
     "boto3",
