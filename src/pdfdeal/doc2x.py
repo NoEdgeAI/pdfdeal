@@ -812,16 +812,12 @@ class Doc2X:
                 This option only takes effect when upload model is "v3-2026".
             ocr (bool, optional): This option is deprecated and will not be used.
             save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
-            export_history(str, optional): Export history file. Defaults to None.
         Returns:
             Tuple[List[str], List[dict], bool]: A tuple containing:
                 - List[str]: List of output file paths
                 - List[dict]: List of error messages
                 - bool: Whether there was an error
         """
-
-        # 未完全测试完
-        export_history = ""
 
         if ocr:
             import warnings
@@ -843,6 +839,5 @@ class Doc2X:
                 merge_cross_page_forms=merge_cross_page_forms,
                 formula_level=formula_level,
                 save_subdir=save_subdir,
-                export_history=export_history,
             )
         )
