@@ -4,7 +4,7 @@ version = "1.0.4"
 authors = [{ name = "noedgeai", email = "support@noedgeai.com" }]
 description = "Python SDK for Doc2X API and some native texts processing (to improve texts recall in RAG)."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -13,13 +13,11 @@ classifiers = [
 dependencies = [
     "aiofiles>=24.1.0",
     "cryptography>=46.0.5",
-    "h2>=4.3.0; python_version>='3.9'",
+    "h2>=4.3.0",
     "httpx[http2]>=0.23.1, <1",
-    "pypdf>=6.8.0; python_version>='3.9'",
-    "pypdf>=5.0.0,<6.0.0; python_version<'3.9'",
+    "pypdf>=6.8.0",
     "pytest>=8.3.5",
-    "urllib3>=2.6.3; python_version>='3.9'",
-    "urllib3>=1.26.20,<2.0.0; python_version<'3.9'",
+    "urllib3>=2.6.3",
 ]
 
 [project.optional-dependencies]
