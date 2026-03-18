@@ -1,7 +1,13 @@
 import asyncio
+import csv
 import os
-from typing import Tuple, List
+from datetime import datetime
+from typing import Dict, Tuple, List, Union, Optional, Any, Coroutine
 import logging
+
+import aiofiles
+import aiofiles.os
+
 from .Doc2X.ConvertV2 import (
     upload_pdf,
     uid_status,
@@ -9,24 +15,140 @@ from .Doc2X.ConvertV2 import (
     get_convert_result,
     download_file,
 )
-from .Doc2X.Types import OutputFormat
+from .Doc2X.Types import (
+    FormulaLevelType,
+    OutputFormat,
+    V2ParseModel,
+    V2ParseModelType,
+    normalize_formula_level,
+    normalize_v2_parse_model,
+)
 from .Doc2X.Pages import get_pdf_page_count
 from .Doc2X.Exception import RequestError, RateLimit, run_async
-from .FileTools.file_tools import get_files
+from .FileTools.file_tools import get_files, save_json
 import time
+from .doc2x_img import ImageProcessor
 
 logger = logging.getLogger(name="pdfdeal.doc2x")
 
 
+async def record_export_history(
+        csv_path: str,
+        uid: str,
+        file_name: str = None,
+        upload_time: float = None,
+        status: str = None,
+        is_export: bool = False,
+        lock: asyncio.Lock = None,
+):
+    """Record history using csv"""
+    csv_header = ["uid", "file_name", "upload_time_str", "status", "is_export"]
+    async with lock:
+        update_data = {}
+        if file_name is not None:
+            update_data["file_name"] = file_name
+        if upload_time is not None:
+            update_data["upload_time_str"] = datetime.fromtimestamp(upload_time).strftime("%Y-%m-%d %H:%M:%S")
+        if status is not None:
+            update_data["status"] = status
+        if is_export is not None:
+            update_data["is_export"] = str(is_export)
+        output_dir = os.path.dirname(csv_path)
+        if output_dir:
+            await aiofiles.os.makedirs(output_dir, exist_ok=True)
+        try:
+            async with aiofiles.open(csv_path, mode="r+", encoding="utf-8", newline="") as f:
+                lines = await f.readlines()
+                output_lines = []
+                uid_found = False
+                if not lines:
+                    output_lines.append(",".join(csv_header) + "\n")
+                else:
+                    output_lines.append(lines[0])
+                    for line in lines[1:]:
+                        if line.strip():
+                            row_list = line.strip().split(',')
+                            row_uid = row_list[0] if row_list else ""
+                            if row_uid == uid:
+                                uid_found = True
+                                row_dict = dict(zip(csv_header, row_list))
+                                row_dict.update(update_data)
+                                updated_row_list = [row_dict.get(h, "") for h in csv_header]
+                                output_lines.append(",".join(map(str, updated_row_list)) + "\n")
+                            else:
+                                output_lines.append(line)
+                if not uid_found:
+                    new_row_dict = {
+                        "uid": uid,
+                        "file_name": file_name,
+                        "upload_time_str": update_data.get("upload_time_str", ""),
+                        "status": status,
+                        "is_export": str(is_export) if is_export is not None else ""
+                    }
+                    new_row_list = [new_row_dict.get(h, "") for h in csv_header]
+                    output_lines.append(",".join(map(str, new_row_list)) + "\n")
+                await f.seek(0)
+                await f.truncate()
+                await f.writelines(output_lines)
+
+        except FileNotFoundError:
+            async with aiofiles.open(csv_path, mode="w", encoding="utf-8", newline="") as f:
+                await f.write(",".join(csv_header) + "\n")
+                new_row_dict = {
+                    "uid": uid,
+                    "file_name": file_name,
+                    "upload_time_str": update_data.get("upload_time_str", ""),
+                    "status": status,
+                    "is_export": str(is_export) if is_export is not None else ""
+                }
+                new_row_list = [new_row_dict.get(h, "") for h in csv_header]
+                await f.write(",".join(map(str, new_row_list)) + "\n")
+
+
+async def read_export_history(csv_path: str) -> Dict[str, bool]:
+    """Read export history from csv_path"""
+    file_to_export_status_map: Dict[str, bool] = {}
+    if not await aiofiles.os.path.exists(csv_path):
+        return file_to_export_status_map
+    try:
+        async with aiofiles.open(csv_path, mode="r", encoding="utf-8", newline="") as f:
+            header_read = False
+            file_name_index = -1
+            is_export_index = -1
+            async for line in f:
+                if not line.strip():
+                    continue
+                row = next(csv.reader([line]))
+                if not header_read:
+                    try:
+                        file_name_index = row.index("file_name")
+                        is_export_index = row.index("is_export")
+                        header_read = True
+                    except ValueError as e:
+                        print(f"错误: CSV文件中缺少必要的列: {e}")
+                        return {}  # 表头不正确，返回空字典
+                    continue  # 跳过表头行，继续下一次循环
+                if len(row) > max(file_name_index, is_export_index):
+                    file_name = row[file_name_index]
+                    is_export_str = row[is_export_index]
+                    is_export_bool = is_export_str.strip().lower() == 'true'
+                    file_to_export_status_map[file_name] = is_export_bool
+    except Exception as e:
+        print(f"读取或解析CSV文件时发生错误: {e}")
+    return file_to_export_status_map
+
+
 async def parse_pdf(
-    apikey: str,
-    pdf_path: str,
-    maxretry: int,
-    wait_time: int,
-    max_time: int,
-    convert: bool,
-    oss_choose: str = "auto",
-) -> Tuple[str, List[str], List[dict]]:
+        apikey: str,
+        pdf_path: str,
+        maxretry: int,
+        wait_time: int,
+        max_time: int,
+        convert: bool,
+        oss_choose: str = "auto",
+        model: V2ParseModelType = None,
+        export_history: str = "",
+) -> Tuple[str, List[str], List[dict], Any]:
     """Parse PDF file and return uid and extracted text"""
 
     async def task_limit_lock():
@@ -49,21 +171,43 @@ async def parse_pdf(
     for attempt in range(maxretry):
         try:
             logger.info(f"Uploading {pdf_path}...")
-            uid = await upload_pdf(apikey, pdf_path, oss_choose)
+            uid = await upload_pdf(apikey, pdf_path, oss_choose, model=model)
+            if export_history != "":
+                await record_export_history(
+                    csv_path=export_history,
+                    uid=uid,
+                    file_name=pdf_path,
+                    upload_time=time.time(),
+                    status="Processing",
+                    is_export=False,
+                    lock=asyncio.Lock())
+
             logger.info(f"Uploading successful for {pdf_path} with uid {uid}")
 
             for _ in range(max_time // 3):
                 try:
-                    progress, status, texts, locations = await uid_status(
+                    progress, status, texts, locations, raw_result = await uid_status(
                         apikey, uid, convert
                     )
                     if status == "Success":
                         logger.info(f"Parsing successful for {pdf_path} with uid {uid}")
-                        return uid, texts, locations
+                        if export_history != "":
+                            await record_export_history(
+                                csv_path=export_history,
+                                uid=uid,
+                                status="Success",
+                                lock=asyncio.Lock())
+                        return uid, texts, locations, raw_result
                     elif status == "Processing file":
                         logger.info(f"Processing {uid} : {progress}%")
                         await asyncio.sleep(3)
                     else:
+                        if export_history != "":
+                            await record_export_history(
+                                csv_path=export_history,
+                                uid=uid,
+                                status="Failed",
+                                lock=asyncio.Lock())
                         raise RequestError(
                             f"Unexpected status: {status} with uid: {uid}"
                         )
@@ -85,22 +229,30 @@ async def parse_pdf(
                 raise RequestError(
                     "Max retry reached for parse_pdf, this may be a rate limit issue, try to reduce the number of threads."
                 )
-
     raise RequestError("Failed to parse PDF after maximum retries")
 
 
 async def convert_to_format(
-    apikey: str,
-    uid: str,
-    output_format: str,
-    output_path: str,
-    output_name: str,
-    max_time: int,
-) -> str:
+        apikey: str,
+        uid: str,
+        output_format: str,
+        output_path: str,
+        output_name: str,
+        max_time: int,
+        merge_cross_page_forms: bool = False,
+        formula_level: FormulaLevelType = 0,
+        save_subdir: bool = False,
+    ) -> str:
     """Convert parsed PDF to specified format"""
-
     logger.info(f"Converting {uid} to {output_format}...")
-    status, url = await convert_parse(apikey, uid, output_format)
+    status, url = await convert_parse(
+        apikey,
+        uid,
+        output_format,
+        merge_cross_page_forms=merge_cross_page_forms,
+        formula_level=formula_level,
+    )
+
     for _ in range(max_time // 3):
         if status == "Success":
             logger.info(f"Downloading {uid} {output_format} file to {output_path}...")
@@ -109,6 +261,7 @@ async def convert_to_format(
                 file_type=output_format,
                 target_folder=output_path,
                 target_filename=output_name or uid,
+                save_subdir=save_subdir,
             )
         elif status == "Processing":
             logger.info(f"Converting {uid} {output_format} file...")
@@ -119,17 +272,42 @@ async def convert_to_format(
     raise RequestError(f"Max time reached for get_convert_result with uid: {uid}")
 
 
+async def save_json_format(
+        output_path: str,
+        output_name: str,
+        json_content: Any = None,
+        save_subdir: bool = False,
+    ):
+    """Save the JSON file
+    Args:
+    output_path (str): The path to save the JSON file
+    output_name(str): JSON file name
+    json_content (Any): The JSON content to save
+    """
+    loop = asyncio.get_running_loop()
+    saved_path = await loop.run_in_executor(
+        None,
+        save_json,
+        output_path,
+        output_name,
+        json_content,
+        save_subdir,
+    )
+
+    return saved_path
+
+
 class Doc2X:
     def __init__(
-        self,
-        apikey: str = None,
-        thread: int = 5,
-        max_pages: int = 1000,
-        retry_time: int = 5,
-        max_time: int = 300,
-        debug: bool = False,
-        full_speed: bool = False,
-    ) -> None:
+            self,
+            apikey: str = None,
+            thread: int = 5,
+            max_pages: int = 1000,
+            retry_time: int = 5,
+            max_time: int = 300,
+            debug: bool = False,
+            full_speed: bool = False,
+        ) -> None:
         """
         Initialize a Doc2X client.
 
@@ -157,6 +335,7 @@ class Doc2X:
         self.max_pages = max_pages
         self.request_interval = 0.1
         self.full_speed = full_speed
+        self._image_processor = None
 
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
@@ -170,15 +349,67 @@ class Doc2X:
             logging.getLogger("pdfdeal").setLevel(logging.DEBUG)
         self.debug = debug
 
+    @property
+    def image_processor(self) -> ImageProcessor:
+        """Lazy initialization of ImageProcessor"""
+        if self._image_processor is None:
+            self._image_processor = ImageProcessor(self.apikey)
+        return self._image_processor
+
+    def piclayout(
+            self,
+            pic_file,
+            output_format: str = "text",
+            output_path: str = "./Output",
+            save_subdir: bool = False,
+            concurrent_limit: Optional[int] = 5,
+        ) -> tuple[List[Union[list, str]], List[dict], bool]:
+        """Process image files with layout analysis
+
+        Args:
+            pic_file (str | List[str]): Path to image files (jpg/png)
+            output_format (str): The output format. Defaults to "text". Available values are 'text', 'md', ''md_dollar
+            output_path (str): Path to save the result json and decoded base64 image zip. Defaults to Output.
+            save_subdir (bool): Save the output to a subfolder under output_path. Defaults to False.
+            concurrent_limit (int, optional): Maximum number of concurrent tasks. Defaults to 5.
+
+        Returns:
+            Tuple containing:
+                - List of layout analysis results (list or str)
+                - List of dictionaries containing error information
+                - Boolean indicating if any errors occurred
+        """
+
+        if os.path.exists(output_path):
+            if not os.path.isdir(output_path):
+                raise ValueError("output_path must be a directory")
+        else:
+            os.makedirs(output_path, exist_ok=True)
+
+        return self.image_processor.pic2file(
+            pic_file=pic_file,
+            process_type="layout",
+            output_format=output_format,
+            output_path=output_path,
+            save_subdir=save_subdir,
+            concurrent_limit=concurrent_limit,
+        )
+
     async def pdf2file_back(
-        self,
-        pdf_file,
-        output_names: List[str] = None,
-        output_path: str = "./Output",
-        output_format: str = "md_dollar",
-        convert: bool = False,
-        oss_choose: str = "auto",
-    ) -> Tuple[List[str], List[dict], bool]:
+            self,
+            pdf_file,
+            output_names: List[str] = None,
+            output_path: str = "./Output",
+            output_format: str = "md_dollar",
+            convert: bool = False,
+            oss_choose: str = "auto",
+            model: V2ParseModelType = None,
+            merge_cross_page_forms: bool = False,
+            formula_level: FormulaLevelType = 0,
+            save_subdir: bool = False,
+            export_history: str = "",
+        ) -> Tuple[List[str], List[dict], bool]:
+
         if isinstance(pdf_file, str):
             if os.path.isdir(pdf_file):
                 pdf_file, output_names = get_files(
@@ -208,10 +439,34 @@ class Doc2X:
         else:
             raise ValueError("Invalid output format, should be a string.")
 
+        if 'json' in output_format:
+            logger.warning(
+                "You have used JSON result output. The output will contain online links that expire in 24 hours. Please remember to manually save the results. (您使用了 json 结果输出，输出结果中会有 24h 过期的在线链接，请注意手动保存结果)"
+            )
+
         for fmt in output_formats:
             fmt = OutputFormat(fmt)
             if isinstance(fmt, OutputFormat):
                 fmt = fmt.value
+        formula_level = normalize_formula_level(formula_level)
+
+        try:
+            normalized_model = normalize_v2_parse_model(model)
+            model_enum = V2ParseModel(normalized_model) if normalized_model else None
+            if model_enum == V2ParseModel.V3_2026:
+                model_version = "v3"
+                model_label = normalized_model
+            else:
+                model_version = "v2"
+                model_label = "default(v2)"
+        except Exception:
+            normalized_model = str(model).strip() if model is not None else ""
+            model_version = "custom"
+            model_label = normalized_model or "default(v2)"
+
+        logger.info(
+            f"Doc2X parse model selected: {model_version} ({model_label})"
+        )
 
         # Track total pages and last request time
         total_pages = 0
@@ -221,7 +476,7 @@ class Doc2X:
         convert_tasks = set()
         results = [None] * len(pdf_file)
         parse_results = [None] * len(pdf_file)
-        global limit_lock, get_max_limit, max_threads, full_speed, thread_min
+        global limit_lock, get_max_limit, max_threads, full_speed, thread_min, file_export_map
         thread_min = self.thread
         full_speed = self.full_speed
         limit_lock = asyncio.Lock()
@@ -269,7 +524,7 @@ class Doc2X:
 
                 # Process the file
                 try:
-                    uid, texts, locations = await parse_pdf(
+                    uid, texts, locations, raw_result = await parse_pdf(
                         apikey=self.apikey,
                         pdf_path=pdf,
                         maxretry=self.retry_time,
@@ -277,8 +532,10 @@ class Doc2X:
                         max_time=self.max_time,
                         convert=convert,
                         oss_choose=oss_choose,
+                        model=model,
+                        export_history=export_history,
                     )
-                    parse_results[index] = (uid, texts, locations)
+                    parse_results[index] = (uid, texts, locations, raw_result)
                     # Create convert task as soon as parse is complete
                     task = asyncio.create_task(convert_file(index, name))
                     convert_tasks.add(task)
@@ -298,9 +555,48 @@ class Doc2X:
         async def convert_file(index, name):
             if parse_results[index] is None:
                 return
-            uid, texts, locations = parse_results[index]
+            uid, texts, locations, raw_result = parse_results[index]
             all_results = []
             all_errors = []
+            json_output_reason = "single output name"
+            if isinstance(name, list):
+                json_output_name = None
+                if "json" in output_formats:
+                    json_format_index = output_formats.index("json")
+                    if json_format_index < len(name):
+                        json_output_name = name[json_format_index]
+                        json_output_reason = (
+                            f'using output_names[{json_format_index}] because '
+                            f'output_format includes "json"'
+                        )
+                if not json_output_name:
+                    json_output_name = next((item for item in name if item), None)
+                    json_output_reason = (
+                        "using the first non-empty output_names entry because "
+                        'output_format does not include "json"'
+                    )
+            else:
+                json_output_name = name
+            json_output_name = json_output_name or os.path.basename(pdf_file[index])
+            v3_json_result_path = None
+            if model_enum == V2ParseModel.V3_2026 and raw_result is not None:
+                v3_json_result_path = await save_json_format(
+                    output_path=os.path.join(
+                        output_path, os.path.dirname(json_output_name)
+                    ),
+                    output_name=os.path.basename(json_output_name),
+                    json_content=raw_result,
+                    save_subdir=save_subdir,
+                )
+                if isinstance(name, list) and len(name) > 1:
+                    logger.info(
+                        "V3 sidecar JSON naming for %s: %s. Requested output_names=%s. "
+                        "Saved to %s",
+                        pdf_file[index],
+                        json_output_reason,
+                        name,
+                        v3_json_result_path,
+                    )
 
             for name_index, fmt in enumerate(output_formats):
                 if isinstance(name, list):
@@ -311,6 +607,7 @@ class Doc2X:
                 else:
                     name_fmt = name
                 try:
+                    output_name = name_fmt or os.path.basename(pdf_file[index])
                     if fmt in ["md", "md_dollar", "tex", "docx"]:
                         nonlocal last_request_time
                         # Wait for request interval
@@ -324,6 +621,7 @@ class Doc2X:
                         async with page_lock:
                             last_request_time = time.time()
 
+
                         result = await convert_to_format(
                             apikey=self.apikey,
                             uid=uid,
@@ -331,7 +629,16 @@ class Doc2X:
                             output_path=output_path,
                             output_name=name_fmt,
                             max_time=self.max_time,
+                            merge_cross_page_forms=merge_cross_page_forms,
+                            formula_level=formula_level,
+                            save_subdir=save_subdir
                         )
+                        if export_history != "":
+                            await record_export_history(
+                                csv_path=export_history,
+                                uid=uid,
+                                is_export=True,
+                                lock=asyncio.Lock())
                         all_results.append(result)
                         all_errors.append("")
                         # Wait 5 seconds between formats
@@ -350,6 +657,31 @@ class Doc2X:
                                 {"text": text, "location": loc}
                                 for text, loc in zip(texts, locations)
                             ]
+
+                        elif fmt == "json":
+                            if v3_json_result_path is not None:
+                                result = v3_json_result_path
+                            else:
+                                json_content = [
+                                    {"text": text, "location": loc}
+                                    for text, loc in zip(texts, locations)
+                                ]
+                                result = await save_json_format(
+                                    output_path=os.path.join(
+                                        output_path, os.path.dirname(output_name)
+                                    ),
+                                    output_name=os.path.basename(output_name),
+                                    json_content=json_content,
+                                    save_subdir=save_subdir,
+                                )
+
+
+                        if export_history != "":
+                            await record_export_history(
+                                csv_path=export_history,
+                                uid=uid,
+                                is_export=True,
+                                lock=asyncio.Lock())
                         all_results.append(result)
                         all_errors.append("")
 
@@ -376,7 +708,16 @@ class Doc2X:
             )
 
         # Create and run parse tasks with controlled concurrency
+
+        if export_history != "":
+            file_export_map = await read_export_history(export_history)
+            print(f"export_history{file_export_map}")
+
         for i, (pdf, name) in enumerate(zip(pdf_file, output_names)):
+            if export_history != "":
+                if file_export_map.get(pdf, False) is True:
+                    results[i] = ('', '', '')
+                    continue
             while len(parse_tasks) >= max_threads:
                 done, parse_tasks = await asyncio.wait(
                     parse_tasks, return_when=asyncio.FIRST_COMPLETED
@@ -437,40 +778,47 @@ class Doc2X:
         return success_files, failed_files, has_error
 
     def pdf2file(
-        self,
-        pdf_file,
-        output_names: List[str] = None,
-        output_path: str = "./Output",
-        output_format: str = "md_dollar",
-        convert: bool = False,
-        oss_choose: str = "always",
-        ocr: bool = False,
-    ) -> Tuple[List[str], List[dict], bool]:
-        """Convert PDF files to the specified format.
-
+            self,
+            pdf_file,
+            output_names: List[str] = None,
+            output_path: str = "./Output",
+            output_format: str = "md_dollar",
+            convert: bool = False,
+            oss_choose: str = "always",
+            model: V2ParseModelType = None,
+            merge_cross_page_forms: bool = False,
+            formula_level: FormulaLevelType = 0,
+            ocr: bool = False,
+            save_subdir: bool = False,
+        ) -> Tuple[List[str], List[dict], bool]:
+        """Convert PDF file to specified format
         Args:
-            pdf_file (str | List[str]): Path to a single PDF file or a list of PDF file paths.
-            output_names (List[str], optional): List of output file names. Defaults to None.
-            output_path (str, optional): Directory path for output files. Defaults to "./Output".
-            output_format (str, optional): Desired output format. Defaults to `md_dollar`. Supported formats include:`md_dollar`|`md`|`tex`|`docx`, will return the path of files, support output variable: `text`|`texts`|`detailed`(it means `string in md format`, `list of strings split by page`, `list of strings split by page (including detailed page information)`)
-            convert (bool, optional): Whether to convert "[" and "[[" to "$" and "$$", only valid if `output_format` is a variable format(`txt`|`txts`|`detailed`). Defaults to False.
-            oss_choose (str, optional): Now can upload files directly through API or through OSS link given by API. Acceptable values: `auto`, `always`, `never` (it means `Only >=100MB files will be uploaded to OSS`, `All files will be uploaded to OSS`, `All files will be uploaded directly`). Defaults to "always".
+            pdf_file (str or list): The path of the PDF file or a list of PDF file paths
+            output_names (List[str], optional): The output file names. Defaults to None.
+            output_path (str, optional): The output path. Defaults to "./Output".
+            output_format (str, optional): The output format. Defaults to "md_dollar".
+            convert (bool, optional): Convert "[" and "[[" to "$" and "$$". Defaults to False.
+            oss_choose (str, optional): Upload preference. The deprecated direct-upload
+                path is no longer used. "always" and "auto" both use preupload.
+                "never"/"none" is rejected because it would require the deprecated
+                direct-upload endpoint. Defaults to "always".
+            model (V2ParseModelType, optional): Upload model for v2 preupload API. Use "v3-2026" for latest model experience. Defaults to None (server default model).
+            merge_cross_page_forms (bool, optional): Whether to merge cross-page forms. Defaults to False.
+            formula_level (FormulaLevelType, optional): Formula degradation level for export body.
+                0 (default, recommended): Keep original formulas.
+                1: Degrade inline formulas to plain text (\\(...\\), $...$).
+                2: Degrade all formulas to plain text, including inline and block formulas
+                   (\\(...\\), $...$, \\[...\\], $$...$$).
+                This option only takes effect when upload model is "v3-2026".
             ocr (bool, optional): This option is deprecated and will not be used.
-
+            save_subdir (bool, optional): Save the output to a subfolder under output_path. Defaults to False.
         Returns:
             Tuple[List[str], List[dict], bool]: A tuple containing:
-                1. A list of successfully converted file paths or content.
-                2. A list of dictionaries containing error information for failed conversions.
-                3. A boolean indicating whether any errors occurred during the conversion process.
-
-        Raises:
-            Any exceptions raised by pdf2file_back or run_async.
-
-        Note:
-            This method provides a convenient synchronous interface for the asynchronous
-            PDF conversion functionality. It handles all the necessary setup for running
-            the asynchronous code in a synchronous context.
+                - List[str]: List of output file paths
+                - List[dict]: List of error messages
+                - bool: Whether there was an error
         """
+
         if ocr:
             import warnings
 
@@ -479,7 +827,6 @@ class Doc2X:
                 DeprecationWarning,
                 stacklevel=2,
             )
-
         return run_async(
             self.pdf2file_back(
                 pdf_file=pdf_file,
@@ -488,5 +835,9 @@ class Doc2X:
                 output_format=output_format,
                 convert=convert,
                 oss_choose=oss_choose,
+                model=model,
+                merge_cross_page_forms=merge_cross_page_forms,
+                formula_level=formula_level,
+                save_subdir=save_subdir,
             )
         )

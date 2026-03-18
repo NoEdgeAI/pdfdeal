@@ -1,22 +1,37 @@
 [project]
 name = "pdfdeal"
-version = "1.0.2"
-authors = [{ name = "Menghuan1918", email = "menghuan@menghuan1918.com" }]
-description = "A python wrapper for the Doc2X API and comes with native texts processing (to improve texts recall in RAG)."
+version = "1.0.4"
+authors = [{ name = "noedgeai", email = "support@noedgeai.com" }]
+description = "Python SDK for Doc2X API and some native texts processing (to improve texts recall in RAG)."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["httpx[http2]>=0.23.1, <1", "pypdf"]
+dependencies = [
+    "aiofiles>=24.1.0",
+    "cryptography>=46.0.5",
+    "h2>=4.3.0",
+    "httpx[http2]>=0.23.1, <1",
+    "pypdf>=6.8.0",
+    "pytest>=8.3.5",
+    "urllib3>=2.6.3",
+]
 
 [project.optional-dependencies]
-tools = ["emoji", "Pillow", "reportlab", "beautifulsoup4"]
+tools = [
+    "emoji",
+    "Pillow>=12.1.1; python_version>='3.10'",
+    "Pillow>=10.4.0,<12.0.0; python_version<'3.10'",
+    "reportlab",
+    "beautifulsoup4",
+]
 rag = [
     "emoji",
-    "Pillow",
+    "Pillow>=12.1.1; python_version>='3.10'",
+    "Pillow>=10.4.0,<12.0.0; python_version<'3.10'",
     "reportlab",
     "oss2",
     "boto3",
@@ -26,7 +41,8 @@ rag = [
 dev = [
     "pytest",
     "emoji",
-    "Pillow",
+    "Pillow>=12.1.1; python_version>='3.10'",
+    "Pillow>=10.4.0,<12.0.0; python_version<'3.10'",
     "reportlab",
     "oss2",
     "boto3",
@@ -35,10 +51,10 @@ dev = [
 ]
 
 [project.urls]
-Issues = "https://github.com/Menghuan1918/pdfdeal/issues"
-Documentation = "https://menghuan1918.github.io/pdfdeal-docs/"
-Source = "https://github.com/Menghuan1918/pdfdeal"
-Changelog = "https://menghuan1918.github.io/pdfdeal-docs/changes/"
+Issues = "https://github.com/NoEdgeAI/pdfdeal/issues"
+Documentation = "https://noedgeai.github.io/pdfdeal-docs"
+Source = "https://github.com/NoEdgeAI/pdfdeal"
+Changelog = "https://noedgeai.github.io/pdfdeal-docs/changes"
 
 [project.scripts]
 doc2x = "pdfdeal.CLI.doc2x:main"

@@ -1,6 +1,7 @@
 import argparse
 import os
 from pdfdeal import Doc2X
+from pdfdeal.Doc2X.Types import FormulaLevel, V2ParseModel
 
 
 def main():
@@ -29,6 +30,26 @@ def main():
         "--max_pages",
         help="The maximum number of pages to process at same time, default is 1000, DO NOT set if you don't know",
         required=False,
+    )
+    parser.add_argument(
+        "--model",
+        help='Upload model for v2 preupload API, e.g. "v3-2026". Leave empty to use server default v2.',
+        required=False,
+        choices=[model.value for model in V2ParseModel],
+    )
+    parser.add_argument(
+        "--formula_level",
+        help=(
+            'Formula degradation level for v2 export body. '
+            '0 (default, recommended)=keep original formulas; '
+            '1=degrade inline formulas (\\(...\\), $...$); '
+            '2=degrade all formulas including block formulas (\\[...\\], $$...$$). '
+            'Only effective when --model is "v3-2026".'
+        ),
+        required=False,
+        type=int,
+        choices=[level.value for level in FormulaLevel],
+        default=FormulaLevel.KEEP_MARKDOWN.value,
     )
     parser.add_argument(
         "-o",
@@ -99,6 +120,8 @@ def main():
         pdf_file=filename,
         output_path=output,
         output_format=format,
+        model=args.model,
+        formula_level=args.formula_level,
     )
 
     for file in success:

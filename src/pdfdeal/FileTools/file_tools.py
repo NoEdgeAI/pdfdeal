@@ -1,4 +1,5 @@
 import io
+import json
 import re
 import unicodedata
 import os
@@ -55,52 +56,6 @@ def clear_cache():
         file_path = os.path.join(temp_image_folder, file)
         if os.path.isfile(file_path):
             os.remove(file_path)
-
-
-def extract_text_and_images(pdf_path, ocr, language=["ch_sim", "en"], GPU=False):
-    """
-    Extract text and images from a PDF file
-    """
-    from pypdf import PdfReader
-    from PIL import Image
-
-    Text = []
-
-    # Open the PDF file
-    with open(pdf_path, "rb") as file:
-        reader = PdfReader(file)
-
-        for page in reader.pages:
-            # Get the text content of the page
-            text = page.extract_text()
-            temp_image_folder = os.path.join(
-                os.path.expanduser("~"), ".cache", "pdfdeal", "pictures"
-            )
-            os.makedirs(temp_image_folder, exist_ok=True)
-            clear_cache()
-            # Get the images on the page
-            images = page.images
-            for id, image in enumerate(images):
-                image_data = image.data
-                image_stream = io.BytesIO(image_data)
-                pil_image = Image.open(image_stream)
-                # Save to HOME/.cache/pdfdeal/pictures, if the directory does not exist, create it
-                temp_image_path = os.path.join(
-                    os.path.expanduser("~"),
-                    ".cache",
-                    "pdfdeal",
-                    "pictures",
-                    f"{id}.png",
-                )
-                pil_image.save(temp_image_path)
-            option = {"GPU": GPU}
-            # Use ocr to extract text from images
-            ocr_text, All_Done = ocr(temp_image_folder, language, option)
-            text += f"\n{ocr_text}"
-            Text.append(clean_text(text))
-        clear_cache()
-    return Text, All_Done
-
 
 def gen_folder_list(path: str, mode: str, recursive: bool = False) -> list:
     """Generate a list of all files in the folder
@@ -163,6 +118,8 @@ def get_files(path: str, mode: str, out: str) -> Tuple[list, list]:
     mode = Support_File_Type(mode)
     if isinstance(mode, Support_File_Type):
         mode = mode.value
+    if not out:
+        out = "md_dollar"
     if out != "pdf":
         out = OutputFormat(out)
         if isinstance(out, OutputFormat):
@@ -444,3 +401,81 @@ def auto_split_mds(
                     f"=====\nError deal with {failed_file['file']} : {failed_file['error']}"
                 )
     return success, failed, flag
+
+
+# json 导出格式会使用该函数
+def save_json(
+    output_path: str,
+    output_name: str,
+    json_content=None,
+    save_subdir: bool = False,
+):
+    """Save the JSON file
+    Args:
+        output_path (str): The path to save the JSON file
+        output_name(str):  JSON file name
+        json_content: The JSON content to save
+    """
+    if json_content is None:
+        json_content = []
+    base_name, _ = os.path.splitext(output_name)
+
+    if save_subdir:
+        output_path = os.path.join(output_path, base_name)
+    
+    final_json_path = os.path.join(output_path, f"{base_name}.json")
+
+    os.makedirs(output_path, exist_ok=True)
+
+    # 处理重复名字的文件
+    counter = 1
+    while os.path.exists(final_json_path):
+        final_json_path = os.path.join(output_path, f"{base_name}_{counter}.json")
+        counter += 1
+
+    with open(final_json_path, 'w', encoding='utf-8') as f:
+        json.dump(json_content, f, ensure_ascii=False, indent=4)
+
+    return final_json_path
+
+
+# image 接口 导出md格式会使用该函数
+def save_md(
+    output_path: str,
+    output_name: str,
+    content: str = '',
+    save_subdir: bool = False,
+):
+    """Save the md file
+    Args:
+        output_path (str): The path to save the JSON file
+        output_name(str):  md file name
+        content (list[dict]): The md content to save
+    """
+
+    base_name, _ = os.path.splitext(output_name)
+
+    if save_subdir:
+        output_path = os.path.join(output_path, base_name)
+    
+    final_md_path = os.path.join(output_path, f"{base_name}.md")
+
+    os.makedirs(output_path, exist_ok=True)
+
+    # 处理重复名字的文件
+    counter = 1
+    while os.path.exists(final_md_path):
+        final_md_path = os.path.join(output_path, f"{base_name}_{counter}.md")
+        counter += 1
+
+    try:
+        with open(final_md_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+    except Exception as e:
+        logging.error(f"Error occurs when saving to {final_md_path}: {str(e)}")
+        fail_reason = str(e) if str(e) else type(e).__name__
+        return '', fail_reason
+
+    return final_md_path, ''
+

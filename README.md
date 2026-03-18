@@ -104,6 +104,8 @@ success, failed, flag = client.pdf2file(
     pdf_file="tests/pdf",
     output_path="./Output",
     output_format="docx",
+    model="v3-2026",  # optional, default is server-side v2
+    formula_level=1,  # optional: 0(default/recommended)=keep formulas; 1=inline formulas -> text; 2=all formulas (inline+block) -> text
 )
 print(success)
 print(failed)
@@ -125,6 +127,89 @@ success, failed, flag = client.pdf2file(
 print(success)
 print(failed)
 print(flag)
+```
+
+### V3 JSON updates
+
+When `model="v3-2026"`:
+
+- `output_format="json"` now saves the raw Doc2X v3 JSON (`result.pages...`) instead of the legacy simplified `[{text, location}]` structure.
+- Raw v3 JSON is always saved as a sidecar `.json` file, even when `output_format` does not include `json` (for example `text`, `detailed`, `md`, `docx`).
+- If `output_format` includes `json`, the sidecar JSON name follows the `json` slot in `output_names`.
+- If `output_format` does not include `json`, the sidecar JSON name follows the first non-empty entry in `output_names`.
+- If `output_names` is omitted, the sidecar JSON falls back to the original PDF basename.
+- Deprecated direct upload is no longer used. `oss_choose="always"` and `oss_choose="auto"` both use the preupload API. `oss_choose="never"` / `oss_choose="none"` now raises an error.
+
+Example:
+
+```python
+from pdfdeal import Doc2X
+
+client = Doc2X(apikey="Your API key", debug=True)
+success, failed, flag = client.pdf2file(
+    pdf_file="tests/pdf/sample.pdf",
+    output_path="./Output/test/v3",
+    output_format="text,json",
+    output_names=[["plain.txt", "viz.data"]],
+    model="v3-2026",
+)
+print(success)  # ["page text...", "./Output/test/v3/viz.json"]
+print(failed)
+print(flag)
+```
+
+### Helper scripts for v3 figure/table crops
+
+Two helper scripts were added under [`scripts/`](/Users/cc/work/NoEdgeAI/pdfdeal/scripts):
+
+- [`extract_v3_figures.py`](/Users/cc/work/NoEdgeAI/pdfdeal/scripts/extract_v3_figures.py): extract figure crops from a PDF using Doc2X v3 JSON
+- [`extract_v3_tables.py`](/Users/cc/work/NoEdgeAI/pdfdeal/scripts/extract_v3_tables.py): extract table crops from a PDF using Doc2X v3 JSON
+
+Both scripts:
+
+- validate that the v3 JSON matches the crop rules first
+- render only pages containing target blocks with `fitz` at the requested `dpi`
+- save full-page PNGs under `_pages/`
+- crop target regions using the block `bbox/xyxy` and page coordinates from the v3 JSON
+- write `manifest.json` with crop metadata
+
+Examples:
+
+```bash
+python scripts/extract_v3_figures.py \
+  --pdf /path/to/input.pdf \
+  --v3-json /path/to/input_v3.json \
+  --dpi 200 \
+  --output-dir ./Output/figures
+```
+
+```bash
+python scripts/extract_v3_tables.py \
+  --pdf /path/to/input.pdf \
+  --v3-json /path/to/input_v3.json \
+  --dpi 200 \
+  --output-dir ./Output/tables
+```
+
+You can also import the helpers directly:
+
+```python
+from pdfdeal import extract_v3_figure_images, extract_v3_table_images
+
+figure_summary = extract_v3_figure_images(
+    pdf_path="/path/to/input.pdf",
+    v3_json_path="/path/to/input_v3.json",
+    dpi=200,
+    output_dir="./Output/figures",
+)
+table_summary = extract_v3_table_images(
+    pdf_path="/path/to/input.pdf",
+    v3_json_path="/path/to/input_v3.json",
+    dpi=200,
+    output_dir="./Output/tables",
+)
+print(figure_summary["crop_count"], figure_summary["manifest_path"])
+print(table_summary["crop_count"], table_summary["manifest_path"])
 ```
 
 See the online documentation for details.
