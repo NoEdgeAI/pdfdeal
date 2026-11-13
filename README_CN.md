@@ -32,7 +32,7 @@
 
 ### Doc2X 支持
 
-[Doc2X](https://doc2x.com/)是一款新型的通用的文档 OCR 工具，可将图像或 pdf 文件转换为带有公式和文本格式的 Markdown/LaTeX 文本，并且效果在大部分场景下优于同类型工具。`pdfdeal`提供了抽象包装好的类以使用 Doc2X 发起请求。
+[Doc2X](https://doc2x.noedgeai.com/)是一款新型的通用的文档 OCR 工具，可将图像或 pdf 文件转换为带有公式和文本格式的 Markdown/LaTeX 文本，并且效果在大部分场景下优于同类型工具。`pdfdeal`提供了抽象包装好的类以使用 Doc2X 发起请求。
 
 ### 对 PDF 进行处理
 
